@@ -8,10 +8,12 @@
                 <a routerLink="/como-jogar" routerLinkActive="active" class="nav-link" (click)="closeMenu()">Como Jogar</a>
             </div>
         }
-        <button class="nav-toggle" aria-label="Abrir menu" (click)="toggleMenu()">
-            <span [class.active]="menuOpen()"></span>
-            <span [class.active]="menuOpen()"></span>
-            <span [class.active]="menuOpen()"></span>
-        </button>
+        @if (showLinks()) {
+            <button class="nav-toggle" aria-label="Abrir menu" (click)="toggleMenu()">
+                <span [class.active]="menuOpen()"></span>
+                <span [class.active]="menuOpen()"></span>
+                <span [class.active]="menuOpen()"></span>
+            </button>
+        }
     </div>
 </nav>
