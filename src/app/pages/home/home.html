@@ -1,0 +1,69 @@
+<section class="hero">
+    <div class="hero-background">
+        <div class="hero-overlay"></div>
+    </div>
+    <div class="hero-content container">
+        <h1>RANDANDAN</h1>
+        <p class="hero-subtitle">O jogo definitivo de adivinhação de motos brasileiras</p>
+        <div class="nav-links">
+            <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="nav-link">Início</a>
+            <a routerLink="/funcionalidades" routerLinkActive="active" class="nav-link">Funcionalidades</a>
+            <a routerLink="/como-jogar" routerLinkActive="active" class="nav-link">Como Jogar</a>
+        </div>
+        <a routerLink="/funcionalidades" class="btn btn-primary btn-lg">Explore as Funcionalidades</a>
+        <a routerLink="/como-jogar" class="btn btn-secondary btn-lg">Como Jogar</a>
+    </div>
+    <div class="hero-fairing">
+        <svg viewBox="0 0 1000 120" preserveAspectRatio="none">
+            <path d="M0,120 L0,40 Q250,0 500,40 T1000,40 L1000,120 Z" fill="var(--red)"/>
+        </svg>
+    </div>
+</section>
+
+<section class="features-preview">
+    <div class="container">
+        <h2 class="section-title">Funcionalidades Principais</h2>
+        <div class="features-preview-grid">
+            <div class="feature-preview-card">
+                <div class="feature-preview-icon">🎯</div>
+                <h3>Modo Diário</h3>
+                <p>Moto secreta única para todos os jogadores a cada dia</p>
+            </div>
+            <div class="feature-preview-card">
+                <div class="feature-preview-icon">♾️</div>
+                <h3>Modo Infinito</h3>
+                <p>Desafios contínuos com motos aleatórias do catálogo</p>
+            </div>
+            <div class="feature-preview-card">
+                <div class="feature-preview-icon">🏆</div>
+                <h3>Sistema de Equipes</h3>
+                <p>Represente sua fabricante e suba nos rankings coletivos</p>
+            </div>
+            <div class="feature-preview-card">
+                <div class="feature-preview-icon">💡</div>
+                <h3>Dicas Estratégicas</h3>
+                <p>Use FIPE e velocidade máxima com impacto na pontuação</p>
+            </div>
+        </div>
+    </div>
+    <div class="features-preview-divider">
+        <svg viewBox="0 0 1000 100" preserveAspectRatio="none">
+            <path d="M0,100 L0,0 Q500,50 1000,0 L1000,100 Z" fill="var(--red-light)"/>
+        </svg>
+    </div>
+</section>
+
+<section class="cta-section">
+    <div class="container">
+        <div class="cta-content">
+            <h2>Pronto para acelerar seu conhecimento?</h2>
+            <p>Teste sua expertise em motos esportivas brasileiras e descubra se você tem o que é preciso para ser o melhor piloto virtual.</p>
+            <a routerLink="/funcionalidades" class="btn btn-primary btn-lg">Comece Agora</a>
+        </div>
+    </div>
+    <div class="cta-divider">
+        <svg viewBox="0 0 1000 100" preserveAspectRatio="none">
+            <path d="M0,0 L0,100 Q500,0 1000,100 L1000,0 Z" fill="var(--white)"/>
+        </svg>
+    </div>
+</section>

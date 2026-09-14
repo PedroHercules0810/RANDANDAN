@@ -1,0 +1,226 @@
+<section class="page-header">
+    <div class="container">
+        <h1>Funcionalidades do RANDANDAN</h1>
+        <p>Descubra todas as características que tornam nosso jogo único</p>
+    </div>
+    <div class="page-header-divider">
+        <svg viewBox="0 0 1000 80" preserveAspectRatio="none">
+            <path d="M0,80 L0,0 Q500,40 1000,0 L1000,80 Z" fill="var(--red)"/>
+        </svg>
+    </div>
+</section>
+
+<section class="detailed-features">
+    <div class="container">
+        <div class="features-tabs">
+            @for (tab of tabs; track tab.id) {
+                <button class="tab-btn" [class.active]="activeTab() === tab.id" (click)="selectTab(tab.id)">{{ tab.label }}</button>
+            }
+        </div>
+
+        <div class="tab-content" id="modo-diario" [class.active]="activeTab() === 'modo-diario'">
+            <div class="feature-detail">
+                <h2>🎯 Modo Diário</h2>
+                <div class="feature-detail-content">
+                    <div class="feature-detail-text">
+                        <p>No Modo Diário, todos os jogadores recebem a mesma moto secreta a cada dia, criando uma competição justa e emocionante onde todos começam nas mesmas condições.</p>
+                        <ul class="feature-list">
+                            <li><strong>Moto Única Diária:</strong> Uma moto esportiva brasileira é selecionada a cada meia-noite (horário de Brasília)</li>
+                            <li><strong>Competição Justa:</strong> Todos os jogadores enfrentam o mesmo desafio</li>
+                            <li><strong>Limite de Tentativas:</strong> Máximo de 6 palpites para acertar</li>
+                            <li><strong>Reset Automático:</strong> A moto muda exatamente às 00:00 horário de Brasília</li>
+                            <li><strong>Tempo Restante:</strong> Veja quanto tempo falta para o próximo desafio</li>
+                        </ul>
+                    </div>
+                    <div class="feature-detail-image">
+                        <div class="mockup-frame">
+                            <div class="mockup-content">
+                                <div class="mockup-title">Desafio Diário</div>
+                                <div class="mockup-subtitle">Hoje: 25/08/2026</div>
+                                <div class="mockup-motorcycle">🏍️</div>
+                                <div class="mockup-attempts">Tentativas: 3/6</div>
+                                <div class="mockup-timer">04:23:15</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="modo-infinito" [class.active]="activeTab() === 'modo-infinito'">
+            <div class="feature-detail">
+                <h2>♾️ Modo Infinito</h2>
+                <div class="feature-detail-content">
+                    <div class="feature-detail-text">
+                        <p>Desafie-se continuamente no Modo Infinito, onde cada vitória leva a um novo desafio com uma moto diferente do nosso catálogo esportivo.</p>
+                        <ul class="feature-list">
+                            <li><strong>Desafios Infinitos:</strong> Após cada acerto, uma nova moto é sorteada</li>
+                            <li><strong>Catálogo Esportivo:</strong> Apenas motos esportivas oficialmente vendidas no Brasil</li>
+                            <li><strong>Sem Limite de Jogos:</strong> Jogue quantas vezes quiser</li>
+                            <li><strong>Prática Perfeita:</strong> Ideal para aprimorar suas habilidades</li>
+                            <li><strong>Progressão de Dificuldade:</strong> As motos podem se tornar mais desafiadoras conforme você avança</li>
+                        </ul>
+                    </div>
+                    <div class="feature-detail-image">
+                        <div class="mockup-frame">
+                            <div class="mockup-content">
+                                <div class="mockup-title">Modo Infinito</div>
+                                <div class="mockup-subtitle">Sequência de vitórias: 7</div>
+                                <div class="mockup-motorcycle">🏍️</div>
+                                <div class="mockup-attempts">Tentativas: 2/6</div>
+                                <div class="mockup-progress">Próxima: ?</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="sistema-equipes" [class.active]="activeTab() === 'sistema-equipes'">
+            <div class="feature-detail">
+                <h2>🏆 Sistema de Equipes</h2>
+                <div class="feature-detail-content">
+                    <div class="feature-detail-text">
+                        <p>Represente sua fabricante favorita e contribua para o sucesso coletivo da sua equipe nos rankings.</p>
+                        <ul class="feature-list">
+                            <li><strong>Escolha Sua Equipe:</strong> Selecione qualquer fabricante brasileira como sua equipe</li>
+                            <li><strong>Ranking Coletivo:</strong> Pontuação da equipe baseada no desempenho de todos os membros</li>
+                            <li><strong>Troca Flexível:</strong> Mude de equipe quando quiser (com algumas restrições)</li>
+                            <li><strong>Ranking Interno:</strong> Veja sua posição dentro da sua própria equipe</li>
+                            <li><strong>Recompensas Coletivas:</strong> EquipesTop recebem reconhecimentos especiais</li>
+                        </ul>
+                    </div>
+                    <div class="feature-detail-image">
+                        <div class="mockup-frame">
+                            <div class="mockup-content">
+                                <div class="mockup-title">Sistema de Equipes</div>
+                                <div class="mockup-subtitle">Sua equipe: Honda</div>
+                                <div class="mockup-ranking">Posição: 3º lugar</div>
+                                <div class="mockup-members">Membros: 1,247</div>
+                                <div class="mockup-score">Pontuação: 15,420</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="dicas" [class.active]="activeTab() === 'dicas'">
+            <div class="feature-detail">
+                <h2>💡 Dicas Estratégicas</h2>
+                <div class="feature-detail-content">
+                    <div class="feature-detail-text">
+                        <p>Use nossas dicas exclusivas quando precisar de ajuda, mas lembre-se: cada dica afeta sua pontuação final!</p>
+                        <ul class="feature-list">
+                            <li><strong>Dica FIPE:</strong> Descubra o preço tabelado da moto secreta</li>
+                            <li><strong>Dica Velocidade Máxima:</strong> Revela a velocidade máxima declarada pela fabricante</li>
+                            <li><strong>Uso Limitado:</strong> Cada dica pode ser usada apenas uma vez por partida</li>
+                            <li><strong>Impacto na Pontuação:</strong> Usar dicas reduz sua pontuação final</li>
+                            <li><strong>Estratégia:</strong> Decida quando vale a pena usar uma dica</li>
+                        </ul>
+                    </div>
+                    <div class="feature-detail-image">
+                        <div class="mockup-frame">
+                            <div class="mockup-content">
+                                <div class="mockup-title">Dicas Disponíveis</div>
+                                <div class="mockup-hint-item">
+                                    <span class="hint-label">FIPE:</span>
+                                    <span class="hint-value">R$ 28.490</span>
+                                    <button class="hint-btn">Usar Dica</button>
+                                </div>
+                                <div class="mockup-hint-item">
+                                    <span class="hint-label">Velocidade Máx:</span>
+                                    <span class="hint-value">210 km/h</span>
+                                    <button class="hint-btn">Usar Dica</button>
+                                </div>
+                                <div class="mockup-penalty">Pontuação atual: -150 (por dicas usadas)</div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="rankings" [class.active]="activeTab() === 'rankings'">
+            <div class="feature-detail">
+                <h2>📊 Rankings em Tempo Real</h2>
+                <div class="feature-detail-content">
+                    <div class="feature-detail-text">
+                        <p>Acompanhe sua evolução e compita pelos melhores lugares em nossos diversos rankings atualizados em tempo real.</p>
+                        <ul class="feature-list">
+                            <li><strong>Ranking Geral:</strong> Os melhores jogadores de todas as equipes</li>
+                            <li><strong>Ranking por Equipe:</strong> Melhores jogadores dentro de cada fabricante</li>
+                            <li><strong>Ranking Diário:</strong> Posicionamento no desafio do dia</li>
+                            <li><strong>Ranking de Equipes:</strong> Qual fabricante tem o melhor desempenho coletivo?</li>
+                            <li><strong>Atualização em Tempo Real:</strong> Veja sua posição mudar conforme outros jogam</li>
+                        </ul>
+                    </div>
+                    <div class="feature-detail-image">
+                        <div class="mockup-frame">
+                            <div class="mockup-content">
+                                <div class="mockup-title">Ranking Geral - Hoje</div>
+                                <div class="ranking-item">
+                                    <span class="rank-position">1º</span>
+                                    <span class="rank-name">MotoMaster</span>
+                                    <span class="rank-score">4.250 pts</span>
+                                </div>
+                                <div class="ranking-item">
+                                    <span class="rank-position">2º</span>
+                                    <span class="rank-name">SpeedRacer</span>
+                                    <span class="rank-score">3.980 pts</span>
+                                </div>
+                                <div class="ranking-item">
+                                    <span class="rank-position">3º</span>
+                                    <span class="rank-name">Você</span>
+                                    <span class="rank-score">3.750 pts</span>
+                                </div>
+                                <div class="ranking-item">
+                                    <span class="rank-position">4º</span>
+                                    <span class="rank-name">BikeExpert</span>
+                                    <span class="rank-score">3.520 pts</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="tab-content" id="competicoes" [class.active]="activeTab() === 'competicoes'">
+            <div class="feature-detail">
+                <h2>👥 Competições Amigáveis</h2>
+                <div class="feature-detail-content">
+                    <div class="feature-detail-text">
+                        <p>Compartilhe suas conquistas sem revelar a resposta e desafie seus amigos a bater seus recordes.</p>
+                        <ul class="feature-list">
+                            <li><strong>Compartilhamento Inteligente:</strong> Mostre seu desempenho sem spoilers</li>
+                            <li><strong>Desafio Direto:</strong> Convide amigos para bater sua pontuação</li>
+                            <li><strong>Redes Sociais:</strong> Compartilhe resultados formatados para Instagram, WhatsApp e mais</li>
+                            <li><strong>Histórico de Competições:</strong> Acompanhe seus duelos com amigos</li>
+                            <li><strong>Conquistas e Badges:</strong> Desbloqueie reconhecimentos especiais por marcos atingidos</li>
+                        </ul>
+                    </div>
+                    <div class="feature-detail-image">
+                        <div class="mockup-frame">
+                            <div class="mockup-content">
+                                <div class="mockup-title">Compartilhe Seu Resultado</div>
+                                <div class="mockup-share-preview">
+                                    <div class="share-header">RANDANDAN</div>
+                                    <div class="share-date">25/08/2026</div>
+                                    <div class="share-moto">🏍️🏍️🏍️⚪️⚪️</div>
+                                    <div class="share-stats">4 tentativas • 0 dicas • 02:15</div>
+                                    <div class="share-footer">Consegue fazer melhor? #Randandan</div>
+                                </div>
+                                <div class="share-buttons">
+                                    <button class="share-btn">WhatsApp</button>
+                                    <button class="share-btn">Instagram</button>
+                                    <button class="share-btn">Copiar Link</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</section>
