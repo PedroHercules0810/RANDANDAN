@@ -5,13 +5,10 @@
     <div class="hero-content container">
         <h1>RANDANDAN</h1>
         <p class="hero-subtitle">O jogo definitivo de adivinhação de motos brasileiras</p>
-        <div class="nav-links">
-            <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="nav-link">Início</a>
-            <a routerLink="/funcionalidades" routerLinkActive="active" class="nav-link">Funcionalidades</a>
-            <a routerLink="/como-jogar" routerLinkActive="active" class="nav-link">Como Jogar</a>
+        <div class="hero-actions">
+            <a routerLink="/funcionalidades" class="btn btn-primary btn-lg">Explore as Funcionalidades</a>
+            <a routerLink="/como-jogar" class="btn btn-secondary btn-lg">Como Jogar</a>
         </div>
-        <a routerLink="/funcionalidades" class="btn btn-primary btn-lg">Explore as Funcionalidades</a>
-        <a routerLink="/como-jogar" class="btn btn-secondary btn-lg">Como Jogar</a>
     </div>
 </section>
 
@@ -20,22 +17,46 @@
         <h2 class="section-title">Funcionalidades Principais</h2>
         <div class="features-preview-grid">
             <div class="feature-preview-card">
-                <div class="feature-preview-icon">🎯</div>
+                <div class="feature-preview-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <circle cx="12" cy="12" r="9" />
+                        <circle cx="12" cy="12" r="4.5" />
+                        <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
+                </svg>
+                </div>
                 <h3>Modo Diário</h3>
                 <p>Moto secreta única para todos os jogadores a cada dia</p>
             </div>
             <div class="feature-preview-card">
-                <div class="feature-preview-icon">♾️</div>
+                <div class="feature-preview-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" />
+                </svg>
+                </div>
                 <h3>Modo Infinito</h3>
                 <p>Desafios contínuos com motos aleatórias do catálogo</p>
             </div>
             <div class="feature-preview-card">
-                <div class="feature-preview-icon">🏆</div>
+                <div class="feature-preview-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+                        <path d="M7 6H5.5a2.5 2.5 0 0 0 0 5H7" />
+                        <path d="M17 6h1.5a2.5 2.5 0 0 1 0 5H17" />
+                        <path d="M12 14v3" />
+                        <path d="M10 17.5h4l1 3.5H9l1-3.5Z" />
+                </svg>
+                </div>
                 <h3>Sistema de Equipes</h3>
                 <p>Represente sua fabricante e suba nos rankings coletivos</p>
             </div>
             <div class="feature-preview-card">
-                <div class="feature-preview-icon">💡</div>
+                <div class="feature-preview-icon">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                    <path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2H14.5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3Z" />
+                        <path d="M9.5 19h5" />
+                        <path d="M10.5 22h3" />
+                </svg>
+                </div>
                 <h3>Dicas Estratégicas</h3>
                 <p>Use FIPE e velocidade máxima com impacto na pontuação</p>
             </div>
