@@ -22,6 +22,14 @@
               {
                 "glob": "**/*",
                 "input": "public"
+              },
+              {
+                "glob": "sitemap.xml",
+                "input": "public"
+              },
+              {
+                "glob": "robots.txt",
+                "input": "public"
               }
             ],
             "styles": [

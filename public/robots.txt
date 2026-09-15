@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://randandan.pedrohercules.dengoso.web.ufersa.dev.br/sitemap.xml
