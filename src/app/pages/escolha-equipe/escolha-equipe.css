@@ -1,0 +1,23 @@
+.auth-section {
+    padding: 4rem 0;
+}
+
+.team-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 1rem;
+    margin-top: 1.5rem;
+}
+
+.team-card {
+    border: 1px solid rgba(0, 0, 0, 0.15);
+    border-radius: 8px;
+    padding: 1.25rem;
+    background: transparent;
+    cursor: pointer;
+    text-align: left;
+}
+
+.auth-error {
+    color: #e03131;
+}

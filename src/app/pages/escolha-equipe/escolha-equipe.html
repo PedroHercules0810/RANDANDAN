@@ -1,0 +1,18 @@
+<section class="auth-section">
+    <div class="container auth-container">
+        <h1>Escolha sua equipe</h1>
+
+        @if (errorMessage()) {
+            <p class="auth-error">{{ errorMessage() }}</p>
+        }
+
+        <div class="team-grid">
+            @for (team of teams; track team.id) {
+                <button type="button" class="team-card" (click)="selectTeam(team.id)">
+                    <h3>{{ team.name }}</h3>
+                    <p>{{ team.manufacturer }}</p>
+                </button>
+            }
+        </div>
+    </div>
+</section>

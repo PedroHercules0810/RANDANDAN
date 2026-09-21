@@ -20,6 +20,11 @@
             <a routerLink="/" routerLinkActive="active" [routerLinkActiveOptions]="{ exact: true }" class="nav-link" (click)="closeMenu()">Início</a>
             <a routerLink="/funcionalidades" routerLinkActive="active" class="nav-link" (click)="closeMenu()">Funcionalidades</a>
             <a routerLink="/como-jogar" routerLinkActive="active" class="nav-link" (click)="closeMenu()">Como Jogar</a>
+            @if (authState().status === 'authenticated') {
+                <a routerLink="/perfil" routerLinkActive="active" class="nav-link" (click)="closeMenu()">Meu Perfil</a>
+            } @else {
+                <a routerLink="/login" routerLinkActive="active" class="nav-link" (click)="closeMenu()">Entrar</a>
+            }
         </div>
         <button class="nav-toggle" aria-label="Abrir menu" (click)="toggleMenu()">
             <span [class.active]="menuOpen()"></span>

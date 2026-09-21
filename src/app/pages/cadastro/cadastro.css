@@ -1,0 +1,29 @@
+.auth-section {
+    padding: 4rem 0;
+}
+
+.auth-container {
+    max-width: 420px;
+}
+
+.auth-form {
+    display: flex;
+    flex-direction: column;
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.auth-form label {
+    display: flex;
+    flex-direction: column;
+    gap: 0.4rem;
+}
+
+.auth-error {
+    color: #e03131;
+    margin-bottom: 1rem;
+}
+
+.auth-hint {
+    margin-top: 1rem;
+}

@@ -1,0 +1,29 @@
+<section class="auth-section">
+    <div class="container auth-container">
+        <h1>Entrar</h1>
+
+        @if (errorMessage()) {
+            <p class="auth-error">{{ errorMessage() }}</p>
+        }
+
+        <form class="auth-form" (ngSubmit)="onSubmit()">
+            <label>
+                E-mail
+                <input type="email" name="email" [(ngModel)]="email" required />
+            </label>
+            <label>
+                Senha
+                <input type="password" name="password" [(ngModel)]="password" required />
+            </label>
+            <button type="submit" class="btn btn-primary btn-lg">Entrar</button>
+        </form>
+
+        <button type="button" class="btn btn-secondary btn-lg" (click)="playAsGuest()">
+            Jogar como convidado
+        </button>
+
+        <p class="auth-hint">
+            Não tem conta? <a routerLink="/cadastro">Cadastre-se</a>
+        </p>
+    </div>
+</section>

@@ -1,0 +1,32 @@
+<section class="auth-section">
+    <div class="container auth-container">
+        <h1>Meu Perfil</h1>
+
+        @if (authState().user; as user) {
+            <p><strong>Nome:</strong> {{ user.displayName }}</p>
+            <p><strong>E-mail:</strong> {{ user.email }}</p>
+            <p>
+                <strong>Equipe:</strong>
+                @if (currentTeam; as team) {
+                    {{ team.name }}
+                } @else {
+                    Nenhuma equipe escolhida —
+                    <a routerLink="/equipe">escolher agora</a>
+                }
+            </p>
+
+            <h2>Histórico de pontuação</h2>
+            @if (scoreHistory.length) {
+                <ul>
+                    @for (score of scoreHistory; track score.date) {
+                        <li>{{ score.date | date: 'short' }} — {{ score.totalPoints }} pts ({{ score.mode }})</li>
+                    }
+                </ul>
+            } @else {
+                <p>Nenhuma partida registrada ainda.</p>
+            }
+
+            <button type="button" class="btn btn-secondary btn-lg" (click)="logout()">Sair</button>
+        }
+    </div>
+</section>

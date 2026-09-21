@@ -1,0 +1,29 @@
+<section class="auth-section">
+    <div class="container auth-container">
+        <h1>Criar conta</h1>
+
+        @if (errorMessage()) {
+            <p class="auth-error">{{ errorMessage() }}</p>
+        }
+
+        <form class="auth-form" (ngSubmit)="onSubmit()">
+            <label>
+                Nome
+                <input type="text" name="displayName" [(ngModel)]="displayName" required />
+            </label>
+            <label>
+                E-mail
+                <input type="email" name="email" [(ngModel)]="email" required />
+            </label>
+            <label>
+                Senha
+                <input type="password" name="password" [(ngModel)]="password" required minlength="6" />
+            </label>
+            <button type="submit" class="btn btn-primary btn-lg">Criar conta</button>
+        </form>
+
+        <p class="auth-hint">
+            Já tem conta? <a routerLink="/login">Entrar</a>
+        </p>
+    </div>
+</section>

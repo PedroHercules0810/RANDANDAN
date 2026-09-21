@@ -1,0 +1,10 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(cp /home/pedrohrcules/RANDANDAN/src/app/pages/login/login.css /home/pedrohrcules/RANDANDAN/src/app/pages/cadastro/cadast…)",
+      "Bash(cp /home/pedrohrcules/RANDANDAN/src/app/pages/login/login.css /home/pedrohrcules/RANDANDAN/src/app/pages/perfil/perfil.c…)",
+      "Bash(cd /home/pedrohrcules/RANDANDAN && npx ng build 2>&1 | tail -80)",
+      "Bash(cd /home/pedrohrcules/RANDANDAN && npx ng build 2>&1 | tail -80)"
+    ]
+  }
+}
