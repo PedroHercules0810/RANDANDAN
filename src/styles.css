@@ -219,14 +219,10 @@ p {
     white-space: nowrap;
 }
 
-.logo-mark {
-    width: 44px;
-    height: 29px;
+.logo-image {
+    width: 56px;
+    height: 56px;
     flex-shrink: 0;
-}
-
-.logo-mark .logo-wheel {
-    stroke: var(--color-accent);
 }
 
 .nav-links {
