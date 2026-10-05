@@ -40,10 +40,6 @@ testem.log
 __screenshots__/
 
 # Environment variables (Cognito, OAuth, etc.) e arquivos gerados
-.env
-.env.local
-.env.*.local
-src/environments/
 
 # System files
 .DS_Store
