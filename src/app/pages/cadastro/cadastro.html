@@ -5,25 +5,67 @@
         @if (errorMessage()) {
             <p class="auth-error">{{ errorMessage() }}</p>
         }
+        @if (successMessage()) {
+            <p class="auth-success">{{ successMessage() }}</p>
+        }
 
-        <form class="auth-form" (ngSubmit)="onSubmit()">
-            <label>
-                Nome
-                <input type="text" name="displayName" [(ngModel)]="displayName" required />
-            </label>
-            <label>
-                E-mail
-                <input type="email" name="email" [(ngModel)]="email" required />
-            </label>
-            <label>
-                Senha
-                <input type="password" name="password" [(ngModel)]="password" required minlength="6" />
-            </label>
-            <button type="submit" class="btn btn-primary btn-lg">Criar conta</button>
-        </form>
+        @if (step() === 'form') {
+            <form class="auth-form" (ngSubmit)="onSubmit()">
+                <label>
+                    Nome
+                    <input type="text" name="displayName" [(ngModel)]="displayName" required autocomplete="name" />
+                </label>
+                <label>
+                    E-mail
+                    <input type="email" name="email" [(ngModel)]="email" required autocomplete="email" />
+                </label>
+                <label>
+                    Senha
+                    <input type="password" name="password" [(ngModel)]="password" required minlength="8" autocomplete="new-password" />
+                </label>
+                <p class="auth-hint">
+                    Mínimo de 8 caracteres, com letra maiúscula, minúscula, número e símbolo.
+                </p>
+                <button type="submit" class="btn btn-primary btn-lg" [disabled]="isBusy()">
+                    @if (isBusy()) {
+                        Criando conta...
+                    } @else {
+                        Criar conta
+                    }
+                </button>
+            </form>
 
-        <p class="auth-hint">
-            Já tem conta? <a routerLink="/login">Entrar</a>
-        </p>
+            <p class="auth-hint">
+                Já tem conta? <a routerLink="/login">Entrar</a>
+            </p>
+        } @else {
+            <form class="auth-form" (ngSubmit)="onConfirm()">
+                <p>
+                    Digite o código de verificação enviado para
+                    <strong>{{ email }}</strong>.
+                </p>
+                <label>
+                    Código de verificação
+                    <input
+                        type="text"
+                        name="confirmationCode"
+                        [(ngModel)]="confirmationCode"
+                        required
+                        inputmode="numeric"
+                        autocomplete="one-time-code"
+                    />
+                </label>
+                <button type="submit" class="btn btn-primary btn-lg" [disabled]="isBusy()">
+                    @if (isBusy()) {
+                        Confirmando...
+                    } @else {
+                        Confirmar e-mail
+                    }
+                </button>
+                <button type="button" class="btn btn-secondary btn-lg" (click)="onResendCode()" [disabled]="isBusy()">
+                    Reenviar código
+                </button>
+            </form>
+        }
     </div>
 </section>

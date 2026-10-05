@@ -5,6 +5,12 @@
         @if (authState().user; as user) {
             <p><strong>Nome:</strong> {{ user.displayName }}</p>
             <p><strong>E-mail:</strong> {{ user.email }}</p>
+            @if (user.provider === 'google') {
+                <p><strong>Autenticação:</strong> Google</p>
+            }
+            @if (!user.emailVerified) {
+                <p class="auth-error">Seu e-mail ainda não foi verificado.</p>
+            }
             <p>
                 <strong>Equipe:</strong>
                 @if (currentTeam; as team) {
@@ -26,7 +32,13 @@
                 <p>Nenhuma partida registrada ainda.</p>
             }
 
-            <button type="button" class="btn btn-secondary btn-lg" (click)="logout()">Sair</button>
+            <button type="button" class="btn btn-secondary btn-lg" (click)="logout()" [disabled]="isLoggingOut()">
+                @if (isLoggingOut()) {
+                    Saindo...
+                } @else {
+                    Sair
+                }
+            </button>
         }
     </div>
 </section>

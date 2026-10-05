@@ -27,3 +27,8 @@
 .auth-hint {
     margin-top: 1rem;
 }
+
+.auth-success {
+    color: #2f9e44;
+    margin-bottom: 1rem;
+}

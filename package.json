@@ -3,10 +3,11 @@
   "version": "0.0.0",
   "scripts": {
     "ng": "ng",
-    "start": "ng serve",
-    "build": "ng build",
-    "watch": "ng build --watch --configuration development",
-    "test": "ng test"
+    "generate:env": "node scripts/generate-env.mjs",
+    "start": "npm run generate:env && ng serve",
+    "build": "npm run generate:env && ng build",
+    "watch": "npm run generate:env && ng build --watch --configuration development",
+    "test": "npm run generate:env && ng test"
   },
   "private": true,
   "packageManager": "npm@11.17.0",
@@ -17,6 +18,7 @@
     "@angular/forms": "^22.1.0",
     "@angular/platform-browser": "^22.1.0",
     "@angular/router": "^22.1.0",
+    "aws-amplify": "^6.22.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0"
   },

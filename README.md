@@ -1,59 +1,72 @@
 # RANDANDAN
 
-This project was generated using [Angular CLI](https://github.com/angular/angular-cli) version 22.1.8.
+Jogo de adivinhação de motos esportivas — landing page e aplicação em [Angular 22](https://angular.dev) com autenticação via **AWS Cognito** (e-mail/senha + Google OAuth).
 
-## Development server
-
-To start a local development server, run:
+## Desenvolvimento local
 
 ```bash
-ng serve
+# 1. Instalar dependências
+npm install
+
+# 2. Configurar as variáveis de ambiente (Cognito/OAuth)
+cp .env.example .env   # preencha com os valores do seu User Pool
+
+# 3. Rodar o servidor de desenvolvimento
+npm start
 ```
 
-Once the server is running, open your browser and navigate to `http://localhost:4200/`. The application will automatically reload whenever you modify any of the source files.
+O app fica disponível em `http://localhost:4200/`.
 
-## Code scaffolding
+> O arquivo `.env` **não é versionado**. Antes de `start`/`build`/`test`, o script
+> `scripts/generate-env.mjs` lê o `.env` (ou variáveis de ambiente do processo) e gera
+> o `src/environments/environment.ts`, que também não vai para o git.
 
-Angular CLI includes powerful code scaffolding tools. To generate a new component, run:
+## Autenticação (AWS Cognito + Google OAuth)
+
+- **E-mail/senha**: cadastro nativo com confirmação de código por e-mail (auto sign-in habilitado).
+- **Google OAuth**: via Hosted UI do Cognito com Authorization Code + PKCE (`signInWithRedirect`).
+
+Nenhum login local (localStorage) é usado: a sessão é gerenciada inteiramente pelo SDK `aws-amplify/auth`.
+
+### Checklist de configuração no console AWS Cognito
+
+1. **User Pool** com login por e-mail e provedor federado **Google**
+   (Client ID/Secret do Google são configurados **apenas aqui**, nunca no código).
+2. **App integration > Domain**: domínio do Hosted UI (ex.: `xxx.auth.us-east-1.amazoncognito.com`).
+3. **App client** (tipo SPA, sem client secret) com Hosted UI habilitado:
+   - **Allowed callback URLs**: `http://localhost:4200/login`, `https://SEU-DOMINIO/login`
+   - **Allowed sign-out URLs**: `http://localhost:4200/`, `https://SEU-DOMINIO/`
+   - **Identity providers**: Google (e Cognito user pool)
+   - **OAuth grant type**: Authorization code grant
+   - **OAuth scopes**: `openid`, `email`, `profile`
+4. **Política de senha** (padrão): mínimo de 8 caracteres com maiúscula, minúscula, número e símbolo.
+
+### Variáveis de ambiente (`.env`)
+
+| Chave | Descrição |
+|---|---|
+| `NG_APP_COGNITO_USER_POOL_ID` | ID do User Pool (`us-east-1_xxxxx`) |
+| `NG_APP_COGNITO_USER_POOL_CLIENT_ID` | ID do App Client (SPA) |
+| `NG_APP_COGNITO_DOMAIN` | Domínio do Hosted UI (sem `https://`) |
+| `NG_APP_OAUTH_REDIRECT_SIGN_IN` | URLs de callback, separadas por vírgula |
+| `NG_APP_OAUTH_REDIRECT_SIGN_OUT` | URLs de logout, separadas por vírgula |
+
+Em produção (AWS Amplify Hosting), configure as mesmas chaves em
+**App settings > Environment variables** — o script `generate-env.mjs` lê
+as variáveis do processo durante o build.
+
+## Build de produção
 
 ```bash
-ng generate component component-name
+npm run build
 ```
 
-For a complete list of available schematics (such as `components`, `directives`, or `pipes`), run:
+Os artefatos ficam em `dist/RANDANDAN/browser` (configurado no `amplify.yml`).
+
+## Testes unitários
 
 ```bash
-ng generate --help
+npm test
 ```
 
-## Building
-
-To build the project run:
-
-```bash
-ng build
-```
-
-This will compile your project and store the build artifacts in the `dist/` directory. By default, the production build optimizes your application for performance and speed.
-
-## Running unit tests
-
-To execute unit tests with the [Vitest](https://vitest.dev/) test runner, use the following command:
-
-```bash
-ng test
-```
-
-## Running end-to-end tests
-
-For end-to-end (e2e) testing, run:
-
-```bash
-ng e2e
-```
-
-Angular CLI does not come with an end-to-end testing framework by default. You can choose one that suits your needs.
-
-## Additional Resources
-
-For more information on using the Angular CLI, including detailed command references, visit the [Angular CLI Overview and Command Reference](https://angular.dev/tools/cli) page.
+Executa os testes com [Vitest](https://vitest.dev/).

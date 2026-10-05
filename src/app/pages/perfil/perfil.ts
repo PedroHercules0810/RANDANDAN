@@ -1,4 +1,4 @@
-import { Component, inject } from '@angular/core';
+import { Component, inject, signal } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { AuthService } from '../../core/services/auth.service';
@@ -18,6 +18,7 @@ export class Perfil {
   private readonly router = inject(Router);
 
   protected readonly authState = this.authService.authState;
+  protected readonly isLoggingOut = signal(false);
 
   protected get currentTeam() {
     return this.teamService.getCurrentTeam();
@@ -27,8 +28,18 @@ export class Perfil {
     return this.scoreService.getPersistedScores();
   }
 
-  protected logout(): void {
-    this.authService.logout();
-    this.router.navigateByUrl('/');
+  protected async logout(): Promise<void> {
+    if (this.isLoggingOut()) {
+      return;
+    }
+
+    this.isLoggingOut.set(true);
+
+    try {
+      await this.authService.logout();
+      await this.router.navigateByUrl('/');
+    } finally {
+      this.isLoggingOut.set(false);
+    }
   }
 }
