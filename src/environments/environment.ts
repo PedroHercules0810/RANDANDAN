@@ -8,11 +8,11 @@ export const environment = {
     "oauthDomain": "us-east-1bltsovg3o.auth.us-east-1.amazoncognito.com",
     "redirectSignIn": [
       "http://localhost:4200/login",
-      "https://randandan.pedrohercules.dengoso.web.ufersa.dev.br/login"
+      "https://pedrohercules.dengoso.web.ufersa.dev.br/login"
     ],
     "redirectSignOut": [
       "http://localhost:4200/",
-      "https://randandan.pedrohercules.dengoso.web.ufersa.dev.br/"
+      "https://pedrohercules.dengoso.web.ufersa.dev.br/"
     ]
   }
 };
