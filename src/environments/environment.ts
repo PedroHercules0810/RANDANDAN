@@ -4,7 +4,7 @@
 export const environment = {
   "cognito": {
     "userPoolId": "us-east-1_BlTSoVg3o",
-    "userPoolClientId": "libpqd631j320r1lvsgle974",
+    "userPoolClientId": "70tt8vqjs25aecfgs9ncvsedcs",
     "oauthDomain": "us-east-1bltsovg3o.auth.us-east-1.amazoncognito.com",
     "redirectSignIn": [
       "http://localhost:4200/login",
