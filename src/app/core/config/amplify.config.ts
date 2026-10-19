@@ -1,8 +1,26 @@
 import { Amplify } from 'aws-amplify';
+import 'aws-amplify/auth/enable-oauth-listener';
 import type { ResourcesConfig } from 'aws-amplify';
 import { environment } from '../../../environments/environment';
 
 let configured = false;
+
+/**
+ * Remove barra final de rotas internas (ex.: `/login/?code=...` -> `/login?code=...`)
+ * adicionada pelo redirect 301 do S3/CloudFront no AWS Amplify Hosting, garantindo
+ * que o `redirect_uri` calculado pelo SDK bata com o cadastrado no Cognito.
+ */
+function normalizePathnameBeforeOAuth(): void {
+  if (typeof window === 'undefined' || !window.location || !window.history) {
+    return;
+  }
+
+  const { pathname, search, hash } = window.location;
+  if (pathname.length > 1 && pathname.endsWith('/')) {
+    const normalizedPath = pathname.replace(/\/+$/, '');
+    window.history.replaceState(window.history.state, '', `${normalizedPath}${search}${hash}`);
+  }
+}
 
 /**
  * Configura o AWS Amplify (Cognito) uma única vez.
@@ -19,6 +37,8 @@ export function configureAmplify(): void {
     return;
   }
   configured = true;
+
+  normalizePathnameBeforeOAuth();
 
   const { userPoolId, userPoolClientId, oauthDomain, redirectSignIn, redirectSignOut } =
     environment.cognito;

@@ -10,6 +10,7 @@ import {
   signOut,
   signUp,
 } from 'aws-amplify/auth';
+import { Hub } from 'aws-amplify/utils';
 import { AuthState } from '../models/auth-state.model';
 import { AuthProvider, User } from '../models/user.model';
 import { configureAmplify } from '../config/amplify.config';
@@ -47,14 +48,19 @@ const FRIENDLY_ERROR_MESSAGES: Record<string, string> = {
 @Injectable({ providedIn: 'root' })
 export class AuthService {
   private readonly state = signal<AuthState>({ status: 'anonymous', user: null });
+  private readonly oauthFailure = signal<string | null>(null);
 
   /** Estado de autenticação reativo (signal somente leitura). */
   readonly authState = computed(() => this.state());
+
+  /** Erro assíncrono emitido pelo fluxo de callback OAuth, se houver. */
+  readonly oauthError = computed(() => this.oauthFailure());
 
   private initPromise: Promise<void> | null = null;
 
   constructor() {
     configureAmplify();
+    this.registerHubListener();
     // Restaura a sessão (ou conclui o redirect OAuth do Google) já na
     // inicialização do app, sem bloquear a renderização.
     this.ensureInitialized();
@@ -64,6 +70,11 @@ export class AuthService {
   ensureInitialized(): Promise<void> {
     this.initPromise ??= this.initialize();
     return this.initPromise;
+  }
+
+  /** Limpa mensagens de erro pendentes do fluxo OAuth. */
+  clearOAuthError(): void {
+    this.oauthFailure.set(null);
   }
 
   /** Login com e-mail e senha (usuário nativo do Cognito). */
@@ -77,17 +88,39 @@ export class AuthService {
 
       await this.refreshUser();
     } catch (error) {
+      if ((error as { name?: string })?.name === 'UserAlreadyAuthenticatedException') {
+        await signOut();
+        const retryResult = await signIn({ username: email.trim(), password });
+        if (!retryResult.isSignedIn) {
+          throw new Error(this.describeSignInStep(retryResult.nextStep.signInStep));
+        }
+        await this.refreshUser();
+        return;
+      }
       throw new Error(this.mapErrorMessage(error));
     }
   }
 
   /** Login social via Google OAuth (Hosted UI do Cognito, PKCE). */
   async signInWithGoogle(): Promise<void> {
+    this.oauthFailure.set(null);
+
     try {
       // Redireciona o navegador para o Hosted UI; o fluxo é concluído
-      // automaticamente em ensureInitialized() quando o usuário volta.
+      // automaticamente quando o usuário retorna com `?code=...`.
       await signInWithRedirect({ provider: 'Google' });
     } catch (error) {
+      if ((error as { name?: string })?.name === 'UserAlreadyAuthenticatedException') {
+        await this.refreshUser();
+        if (this.state().status === 'authenticated') {
+          return;
+        }
+        await signInWithRedirect({
+          provider: 'Google',
+          options: { prompt: 'SELECT_ACCOUNT' },
+        });
+        return;
+      }
       throw new Error(this.mapErrorMessage(error));
     }
   }
@@ -160,6 +193,31 @@ export class AuthService {
     this.state.set(user ? { status: 'authenticated', user } : { status: 'anonymous', user: null });
   }
 
+  /**
+   * Escuta eventos de autenticação do Amplify Hub para reagir à conclusão
+   * (ou falha) assíncrona do fluxo OAuth (`signInWithRedirect`).
+   */
+  private registerHubListener(): void {
+    Hub.listen('auth', ({ payload }) => {
+      switch (payload.event) {
+        case 'signInWithRedirect':
+        case 'signedIn':
+        case 'tokenRefresh':
+          this.oauthFailure.set(null);
+          void this.refreshUser();
+          break;
+        case 'signInWithRedirect_failure': {
+          const rawError = (payload as { data?: { error?: unknown } }).data?.error;
+          this.oauthFailure.set(this.mapOAuthErrorMessage(rawError));
+          break;
+        }
+        case 'signedOut':
+          this.state.set({ status: 'anonymous', user: null });
+          break;
+      }
+    });
+  }
+
   /** Tenta estabelecer a sessão algumas vezes (auto sign-in pós-confirmação). */
   private async establishSessionWithRetry(retries = 4, delayMs = 500): Promise<void> {
     for (let attempt = 0; attempt < retries; attempt++) {
@@ -188,41 +246,125 @@ export class AuthService {
 
   private async loadAuthenticatedUser(): Promise<User | null> {
     try {
-      const currentUser = await getCurrentUser();
-      const attributes = await fetchUserAttributes();
+      const session = await fetchAuthSession();
+      const idTokenPayload = session.tokens?.idToken?.payload as
+        | Record<string, unknown>
+        | undefined;
 
-      const email = attributes.email ?? currentUser.userId;
-      if (!email) {
+      let currentUserId: string | undefined;
+      let currentUsername: string | undefined;
+      try {
+        const currentUser = await getCurrentUser();
+        currentUserId = currentUser.userId;
+        currentUsername = currentUser.username;
+      } catch {
+        // Caso getCurrentUser falhe mas o idToken esteja válido na sessão.
+      }
+
+      // No login via Google OAuth com escopos ['openid', 'email', 'profile'],
+      // o AccessToken não possui o escopo 'aws.cognito.signin.user.admin'.
+      // Chamar fetchUserAttributes() (API GetUser do Cognito) sem esse escopo
+      // lança NotAuthorizedException ("Access Token does not have required scopes").
+      // Por isso, lemos as claims OIDC diretamente do ID Token e só consultamos
+      // fetchUserAttributes() como fallback opcional se necessário.
+      let attributes: Partial<Record<string, string>> = {};
+      if (!idTokenPayload?.['email']) {
+        try {
+          attributes = await fetchUserAttributes();
+        } catch {
+          // Ignora falha de escopo do GetUser quando autenticado via OAuth.
+        }
+      }
+
+      const sub =
+        (typeof idTokenPayload?.['sub'] === 'string' ? idTokenPayload['sub'] : undefined) ??
+        attributes['sub'] ??
+        currentUserId;
+
+      const email =
+        (typeof idTokenPayload?.['email'] === 'string' ? idTokenPayload['email'] : undefined) ??
+        attributes['email'] ??
+        currentUserId;
+
+      if (!sub || !email) {
         return null;
       }
 
+      const tokenName =
+        (typeof idTokenPayload?.['name'] === 'string' ? idTokenPayload['name'] : undefined) ||
+        (typeof idTokenPayload?.['given_name'] === 'string'
+          ? idTokenPayload['given_name']
+          : undefined) ||
+        (typeof idTokenPayload?.['preferred_username'] === 'string'
+          ? idTokenPayload['preferred_username']
+          : undefined) ||
+        (typeof idTokenPayload?.['nickname'] === 'string'
+          ? idTokenPayload['nickname']
+          : undefined);
+
+      const displayName =
+        tokenName ||
+        attributes['name'] ||
+        attributes['preferred_username'] ||
+        attributes['nickname'] ||
+        (email.includes('@') ? email.split('@')[0] : email);
+
+      const provider = this.detectProvider(idTokenPayload, attributes, currentUsername);
+
+      const emailVerifiedClaim = idTokenPayload?.['email_verified'] ?? attributes['email_verified'];
+      const emailVerified =
+        emailVerifiedClaim === true ||
+        emailVerifiedClaim === 'true' ||
+        (provider === 'google' && emailVerifiedClaim !== false && emailVerifiedClaim !== 'false');
+
       return {
-        id: attributes.sub ?? currentUser.userId,
+        id: sub,
         email,
-        displayName:
-          attributes.name ||
-          attributes.preferred_username ||
-          attributes.nickname ||
-          email.split('@')[0],
-        emailVerified: attributes.email_verified === 'true',
-        provider: this.detectProvider(attributes),
+        displayName,
+        emailVerified,
+        provider,
       };
     } catch {
       return null;
     }
   }
 
-  private detectProvider(attributes: Partial<Record<string, string | undefined>>): AuthProvider {
-    const identities = attributes['identities'];
-    if (typeof identities === 'string') {
+  private detectProvider(
+    idTokenPayload: Record<string, unknown> | undefined,
+    attributes: Partial<Record<string, string | undefined>>,
+    username?: string,
+  ): AuthProvider {
+    const rawIdentities = idTokenPayload?.['identities'] ?? attributes['identities'];
+
+    if (Array.isArray(rawIdentities)) {
+      if (
+        rawIdentities.some(
+          (identity) =>
+            typeof identity === 'object' &&
+            identity !== null &&
+            (identity as { providerName?: string }).providerName?.toLowerCase() === 'google',
+        )
+      ) {
+        return 'google';
+      }
+    } else if (typeof rawIdentities === 'string') {
       try {
-        const parsed = JSON.parse(identities) as Array<{ providerName?: string }>;
+        const parsed = JSON.parse(rawIdentities) as Array<{ providerName?: string }>;
         if (parsed.some((identity) => identity.providerName?.toLowerCase() === 'google')) {
           return 'google';
         }
       } catch {
-        // Campo malformado — trata como conta nativa.
+        // Campo malformado — segue para verificação pelo username.
       }
+    }
+
+    const cognitoUsername =
+      (typeof idTokenPayload?.['cognito:username'] === 'string'
+        ? idTokenPayload['cognito:username']
+        : undefined) ?? username;
+
+    if (cognitoUsername?.toLowerCase().startsWith('google_')) {
+      return 'google';
     }
 
     return 'cognito';
@@ -237,6 +379,14 @@ export class AuthService {
       default:
         return `Não foi possível concluir o login (etapa pendente: ${step}).`;
     }
+  }
+
+  private mapOAuthErrorMessage(error: unknown): string {
+    const message = (error as Error)?.message ?? String(error ?? '');
+    if (message.includes('cancelled') || message.includes('canceled') || message.includes('access_denied')) {
+      return 'O login com o Google foi cancelado ou negado.';
+    }
+    return 'Não foi possível concluir o login com o Google. Tente novamente.';
   }
 
   private mapErrorMessage(error: unknown): string {

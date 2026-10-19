@@ -20,13 +20,24 @@ export class Login {
   protected readonly isRedirectingFromOAuth = signal(false);
 
   constructor() {
-    this.checkForOAuthError();
+    this.checkForOAuthCallback();
 
     // Conclui a navegação quando o fluxo OAuth do Google retorna para
-    // esta página e a sessão é estabelecida automaticamente.
+    // esta página e a sessão é estabelecida automaticamente, ou exibe
+    // erros assíncronos reportados pelo listener de OAuth.
     effect(() => {
       if (this.authService.authState().status === 'authenticated') {
+        this.isBusy.set(false);
+        this.isRedirectingFromOAuth.set(false);
         void this.router.navigateByUrl('/perfil');
+        return;
+      }
+
+      const asyncOAuthError = this.authService.oauthError();
+      if (asyncOAuthError) {
+        this.errorMessage.set(asyncOAuthError);
+        this.isBusy.set(false);
+        this.isRedirectingFromOAuth.set(false);
       }
     });
   }
@@ -37,6 +48,7 @@ export class Login {
     }
 
     this.errorMessage.set(null);
+    this.authService.clearOAuthError();
     this.isBusy.set(true);
 
     try {
@@ -55,6 +67,7 @@ export class Login {
     }
 
     this.errorMessage.set(null);
+    this.authService.clearOAuthError();
     this.isBusy.set(true);
     this.isRedirectingFromOAuth.set(true);
 
@@ -68,10 +81,9 @@ export class Login {
   }
 
   /**
-   * O Cognito retorna erros de OAuth como query params (`?error=...`).
-   * Exibimos a mensagem e limpamos a URL.
+   * Trata o retorno do Cognito Hosted UI (`?error=...` ou `?code=...`).
    */
-  private checkForOAuthError(): void {
+  private checkForOAuthCallback(): void {
     const params = new URLSearchParams(window.location.search);
     const oauthError = params.get('error');
 
@@ -83,6 +95,18 @@ export class Login {
           : `Falha no login com o Google${description ? `: ${description}` : '.'}`,
       );
       window.history.replaceState({}, '', window.location.pathname);
+      return;
+    }
+
+    if (params.has('code')) {
+      this.isBusy.set(true);
+      this.isRedirectingFromOAuth.set(true);
+      void this.authService.ensureInitialized().finally(() => {
+        if (this.authService.authState().status !== 'authenticated') {
+          this.isBusy.set(false);
+          this.isRedirectingFromOAuth.set(false);
+        }
+      });
     }
   }
 }

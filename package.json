@@ -4,8 +4,9 @@
   "scripts": {
     "ng": "ng",
     "generate:env": "node scripts/generate-env.mjs",
+    "postbuild:spa": "node scripts/postbuild-spa.mjs",
     "start": "npm run generate:env && ng serve",
-    "build": "npm run generate:env && ng build",
+    "build": "npm run generate:env && ng build && npm run postbuild:spa",
     "watch": "npm run generate:env && ng build --watch --configuration development",
     "test": "npm run generate:env && ng test"
   },
