@@ -1,0 +1,10 @@
+{
+  "name": "randandan-gemini-chat-lambda",
+  "version": "1.0.0",
+  "description": "Função AWS Lambda com SDK @google/genai para o chat de dicas do RANDANDAN",
+  "type": "module",
+  "main": "index.mjs",
+  "dependencies": {
+    "@google/genai": "^1.0.0"
+  }
+}
