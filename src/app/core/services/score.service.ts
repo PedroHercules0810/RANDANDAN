@@ -63,11 +63,24 @@ export class ScoreService {
   }
 
   private persistScores(key: string, scores: Score[]): void {
-    localStorage.setItem(key, JSON.stringify(scores));
+    try {
+      if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+        localStorage.setItem(key, JSON.stringify(scores));
+      }
+    } catch {
+      // Ignora caso localStorage não esteja disponível
+    }
   }
 
   private readScores(key: string): Score[] {
-    const raw = localStorage.getItem(key);
-    return raw ? (JSON.parse(raw) as Score[]) : [];
+    try {
+      if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+        const raw = localStorage.getItem(key);
+        return raw ? (JSON.parse(raw) as Score[]) : [];
+      }
+    } catch {
+      // Ignora caso localStorage não esteja disponível
+    }
+    return [];
   }
 }

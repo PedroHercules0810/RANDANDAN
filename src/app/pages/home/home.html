@@ -6,9 +6,424 @@
         <h1>RANDANDAN</h1>
         <p class="hero-subtitle">O jogo definitivo de adivinhação de motos brasileiras</p>
         <div class="hero-actions">
-            <a routerLink="/funcionalidades" class="btn btn-primary btn-lg">Explore as Funcionalidades</a>
+            <button type="button" class="btn btn-primary btn-lg" (click)="scrollToArena('daily')">Jogar Agora</button>
             <a routerLink="/como-jogar" class="btn btn-secondary btn-lg">Como Jogar</a>
+            <a routerLink="/funcionalidades" class="btn btn-secondary btn-lg">Funcionalidades</a>
         </div>
+    </div>
+</section>
+
+<section id="arena-jogo" class="game-arena">
+    <div class="container">
+        <div class="arena-header">
+            <div>
+                <h2 class="section-title">Arena de Adivinhação</h2>
+                <p class="arena-subtitle">Descubra a motocicleta secreta em até {{ maxAttempts }} tentativas analisando os 5 atributos técnicos.</p>
+            </div>
+
+            <div class="pilot-status-box">
+                @if (authState().status === 'authenticated' && authState().user; as user) {
+                    <div class="pilot-badge authenticated">
+                        <span class="pilot-label">PILOTO AUTENTICADO</span>
+                        <strong>{{ user.displayName }}</strong>
+                        <span class="pilot-team">
+                            @if (currentTeam; as team) {
+                                Equipe: {{ team.name }}
+                            } @else {
+                                <a routerLink="/equipe">Escolher Equipe →</a>
+                            }
+                        </span>
+                    </div>
+                } @else {
+                    <div class="pilot-badge guest">
+                        <span class="pilot-label">MODO VISITANTE</span>
+                        <p>Jogue livremente! <a routerLink="/login">Entre na sua conta</a> para pontuar no ranking oficial.</p>
+                    </div>
+                }
+            </div>
+        </div>
+
+        <div class="features-tabs arena-tabs">
+            <button
+                type="button"
+                class="tab-btn"
+                [class.active]="activeArenaTab() === 'daily'"
+                (click)="selectArenaTab('daily')"
+            >
+                Modo Diário
+            </button>
+            <button
+                type="button"
+                class="tab-btn"
+                [class.active]="activeArenaTab() === 'infinite'"
+                (click)="selectArenaTab('infinite')"
+            >
+                Modo Infinito
+            </button>
+            <button
+                type="button"
+                class="tab-btn"
+                [class.active]="activeArenaTab() === 'rankings'"
+                (click)="selectArenaTab('rankings')"
+            >
+                Rankings
+            </button>
+        </div>
+
+        @if (activeArenaTab() !== 'rankings') {
+            @let round = activeRound();
+
+            <!-- HUD / Telemetria -->
+            <div class="telemetry-bar">
+                <div class="telemetry-item">
+                    <span class="telemetry-label">MODO ATUAL</span>
+                    <strong class="telemetry-value">
+                        @if (activeMode() === 'daily') {
+                            DESAFIO DIÁRIO • {{ todayDateFormatted() }}
+                        } @else {
+                            MODO INFINITO • PRÁTICA LIVRE
+                        }
+                    </strong>
+                </div>
+
+                <div class="telemetry-item">
+                    <span class="telemetry-label">TENTATIVAS</span>
+                    <div class="telemetry-attempts">
+                        <strong class="telemetry-value mono">{{ round.guesses.length }} / {{ maxAttempts }}</strong>
+                        <div class="attempt-dots" aria-hidden="true">
+                            @for (guess of round.guesses; track guess.motorcycle.id) {
+                                <span class="attempt-dot" [class.won]="guess.isCorrect" [class.used]="!guess.isCorrect"></span>
+                            }
+                            @for (slot of remainingSlots(); track slot) {
+                                <span class="attempt-dot"></span>
+                            }
+                        </div>
+                    </div>
+                </div>
+
+                <div class="telemetry-item">
+                    <span class="telemetry-label">TEMPO DE PROVA</span>
+                    <strong class="telemetry-value mono">{{ elapsedFormatted() }}</strong>
+                </div>
+
+                <div class="telemetry-item">
+                    @if (activeMode() === 'daily') {
+                        <span class="telemetry-label">PRÓXIMA MOTO (00:00 BRT)</span>
+                        <strong class="telemetry-value mono accent">{{ countdownFormatted() }}</strong>
+                    } @else {
+                        <span class="telemetry-label">SEQUÊNCIA DE VITÓRIAS</span>
+                        <strong class="telemetry-value mono accent">{{ infiniteStreak() }} <small>(RECORDE: {{ bestInfiniteStreak() }})</small></strong>
+                    }
+                </div>
+            </div>
+
+            <!-- Painel de Dicas Estratégicas -->
+            <div class="arena-hints-bar">
+                <div class="arena-hint-card" [class.revealed]="round.fipeHintUsed || round.status !== 'playing'">
+                    <div class="arena-hint-info">
+                        <span class="arena-hint-tag">DICA 1 • TABELA FIPE</span>
+                        @if (round.fipeHintUsed || round.status !== 'playing') {
+                            <strong class="arena-hint-value">{{ round.target.fipePrice }}</strong>
+                        } @else {
+                            <p class="arena-hint-desc">Revela a faixa de preço FIPE da moto secreta (-200 pts no bônus de dicas)</p>
+                        }
+                    </div>
+                    @if (!round.fipeHintUsed && round.status === 'playing') {
+                        <button type="button" class="hint-action-btn" (click)="revealFipeHint()">Usar Dica FIPE</button>
+                    } @else {
+                        <span class="hint-status-pill">{{ round.fipeHintUsed ? 'DICA USADA' : 'REVELADA' }}</span>
+                    }
+                </div>
+
+                <div class="arena-hint-card" [class.revealed]="round.topSpeedHintUsed || round.status !== 'playing'">
+                    <div class="arena-hint-info">
+                        <span class="arena-hint-tag">DICA 2 • VELOCIDADE MÁXIMA</span>
+                        @if (round.topSpeedHintUsed || round.status !== 'playing') {
+                            <strong class="arena-hint-value">{{ round.target.topSpeedKmh }} km/h</strong>
+                        } @else {
+                            <p class="arena-hint-desc">Revela a velocidade máxima declarada pela fabricante (-200 pts no bônus)</p>
+                        }
+                    </div>
+                    @if (!round.topSpeedHintUsed && round.status === 'playing') {
+                        <button type="button" class="hint-action-btn" (click)="revealTopSpeedHint()">Usar Dica Velocidade</button>
+                    } @else {
+                        <span class="hint-status-pill">{{ round.topSpeedHintUsed ? 'DICA USADA' : 'REVELADA' }}</span>
+                    }
+                </div>
+
+                <div class="arena-hint-summary">
+                    <span class="arena-hint-tag">IMPACTO DE DICAS</span>
+                    <strong class="mono" [class.positive]="currentHintBonusPreview() > 0" [class.negative]="currentHintBonusPreview() < 0">
+                        {{ currentHintBonusPreview() >= 0 ? '+' : '' }}{{ currentHintBonusPreview() }} PTS
+                    </strong>
+                    <small>{{ hintsUsedCount() }}/2 dicas utilizadas</small>
+                </div>
+            </div>
+
+            <!-- Campo de Busca / Autocomplete de Palpite -->
+            @if (round.status === 'playing') {
+                <div class="guess-box">
+                    <label class="guess-label" for="moto-search-input">
+                        FAÇA SEU PALPITE ({{ round.guesses.length + 1 }}ª TENTATIVA DE {{ maxAttempts }})
+                    </label>
+                    <div class="guess-input-row">
+                        <div class="autocomplete-wrapper">
+                            <input
+                                id="moto-search-input"
+                                type="text"
+                                class="guess-input"
+                                placeholder="Digite a marca ou modelo da moto (ex: Honda CB 500F, Yamaha R3, Ninja, Naked)..."
+                                autocomplete="off"
+                                [ngModel]="searchQuery()"
+                                (ngModelChange)="onSearchInput($event)"
+                                (focus)="onSearchFocus()"
+                                (blur)="closeDropdownDelayed()"
+                                (keydown)="onSearchKeydown($event)"
+                            />
+
+                            @if (dropdownOpen()) {
+                                <div class="autocomplete-dropdown" role="listbox">
+                                    @if (filteredSuggestions().length > 0) {
+                                        @for (moto of filteredSuggestions(); track moto.id; let i = $index) {
+                                            <button
+                                                type="button"
+                                                class="autocomplete-option"
+                                                [class.highlighted]="i === highlightedIndex()"
+                                                (mousedown)="chooseMotorcycle(moto)"
+                                            >
+                                                <span class="option-brand">{{ moto.manufacturer }}</span>
+                                                <strong class="option-model">{{ moto.model }}</strong>
+                                                <span class="option-action">PALPITAR →</span>
+                                            </button>
+                                        }
+                                    } @else {
+                                        <div class="autocomplete-empty">
+                                            Nenhuma motocicleta disponível corresponde a "{{ searchQuery() }}".
+                                        </div>
+                                    }
+                                </div>
+                            }
+                        </div>
+
+                        <button type="button" class="btn btn-primary guess-submit-btn" (click)="submitCurrentSearch()">
+                            Confirmar Palpite
+                        </button>
+                    </div>
+
+                    @if (feedbackError()) {
+                        <p class="guess-error">{{ feedbackError() }}</p>
+                    }
+                </div>
+            }
+
+            <!-- Painel de Resultado (Vitória ou Derrota) -->
+            @if (round.status !== 'playing') {
+                <div class="result-banner" [class.won]="round.status === 'won'" [class.lost]="round.status === 'lost'">
+                    <div class="result-banner-main">
+                        <span class="result-tag">
+                            @if (round.status === 'won') {
+                                🏆 VITÓRIA • MOTO SECRETA DESCOBERTA!
+                            } @else {
+                                🏁 FIM DE PROVA • LIMITE DE {{ maxAttempts }} TENTATIVAS ATINGIDO
+                            }
+                        </span>
+                        <h3>{{ round.target.manufacturer }} {{ round.target.model }}</h3>
+                        <div class="result-specs">
+                            <span><strong>Cilindrada:</strong> {{ round.target.displacementCc }} cc</span>
+                            <span><strong>Peso:</strong> {{ round.target.weightKg }} kg</span>
+                            <span><strong>Estilo:</strong> {{ round.target.style }}</span>
+                            <span><strong>FIPE:</strong> {{ round.target.fipePrice }}</span>
+                            <span><strong>Vel. Máx:</strong> {{ round.target.topSpeedKmh }} km/h</span>
+                        </div>
+
+                        @if (round.scoreBreakdown; as score) {
+                            <div class="score-breakdown-grid">
+                                <div class="score-breakdown-item">
+                                    <span>Palpites ({{ round.guesses.length }}/{{ maxAttempts }})</span>
+                                    <strong class="mono">+{{ score.guessPoints }} pts</strong>
+                                </div>
+                                <div class="score-breakdown-item">
+                                    <span>Bônus de Tempo ({{ elapsedFormatted() }})</span>
+                                    <strong class="mono">+{{ score.timeBonus }} pts</strong>
+                                </div>
+                                <div class="score-breakdown-item">
+                                    <span>Dicas ({{ hintsUsedCount() }}/2)</span>
+                                    <strong class="mono">{{ score.hintBonus >= 0 ? '+' : '' }}{{ score.hintBonus }} pts</strong>
+                                </div>
+                                <div class="score-breakdown-item total">
+                                    <span>PONTUAÇÃO FINAL</span>
+                                    <strong class="mono">{{ score.totalPoints }} pts</strong>
+                                </div>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="result-banner-actions">
+                        <div class="share-box">
+                            <span class="share-box-title">COMPARTILHE SEU RESULTADO SEM SPOILERS</span>
+                            <div class="share-actions-row">
+                                <button type="button" class="btn btn-primary" (click)="copyShareResult()">
+                                    @if (copyFeedback()) {
+                                        ✓ Resultado Copiado!
+                                    } @else {
+                                        Copiar Resultado
+                                    }
+                                </button>
+                                <button type="button" class="btn btn-secondary" (click)="shareOnWhatsApp()">
+                                    Compartilhar no WhatsApp
+                                </button>
+                            </div>
+                        </div>
+
+                        @if (activeMode() === 'infinite') {
+                            <button type="button" class="btn btn-accent btn-lg next-challenge-btn" (click)="nextInfiniteChallenge()">
+                                Próximo Desafio Infinito →
+                            </button>
+                        } @else {
+                            <div class="daily-next-notice">
+                                <span>Próximo Desafio Diário em <strong>{{ countdownFormatted() }}</strong></span>
+                                <button type="button" class="link-btn" (click)="selectArenaTab('infinite')">
+                                    Continuar treinando no Modo Infinito →
+                                </button>
+                            </div>
+                        }
+                    </div>
+                </div>
+            }
+
+            <!-- Tabuleiro de Comparação dos 5 Atributos -->
+            <div class="board-wrapper">
+                <div class="board-headers">
+                    <div class="board-col-header">Fabricante</div>
+                    <div class="board-col-header">Modelo</div>
+                    <div class="board-col-header">Cilindrada</div>
+                    <div class="board-col-header">Peso</div>
+                    <div class="board-col-header">Estilo</div>
+                </div>
+
+                <div class="board-rows">
+                    @for (guess of round.guesses; track trackGuess($index, guess); let idx = $index) {
+                        <div class="board-row">
+                            <!-- Fabricante -->
+                            <div class="board-cell" [class.correct]="guess.manufacturerStatus === 'correct'" [class.incorrect]="guess.manufacturerStatus === 'incorrect'">
+                                <span class="cell-mobile-label">Fabricante</span>
+                                <strong class="cell-value">{{ guess.motorcycle.manufacturer }}</strong>
+                                <span class="attribute-result" [class.correct]="guess.manufacturerStatus === 'correct'" [class.incorrect]="guess.manufacturerStatus === 'incorrect'">
+                                    {{ guess.manufacturerStatus === 'correct' ? '✓ CORRETO' : '✗ INCORRETO' }}
+                                </span>
+                            </div>
+
+                            <!-- Modelo -->
+                            <div class="board-cell" [class.correct]="guess.modelStatus === 'correct'" [class.incorrect]="guess.modelStatus === 'incorrect'">
+                                <span class="cell-mobile-label">Modelo</span>
+                                <strong class="cell-value">{{ guess.motorcycle.model }}</strong>
+                                <span class="attribute-result" [class.correct]="guess.modelStatus === 'correct'" [class.incorrect]="guess.modelStatus === 'incorrect'">
+                                    {{ guess.modelStatus === 'correct' ? '✓ CORRETO' : '✗ INCORRETO' }}
+                                </span>
+                            </div>
+
+                            <!-- Cilindrada -->
+                            <div
+                                class="board-cell"
+                                [class.correct]="guess.displacementStatus === 'correct'"
+                                [class.higher]="guess.displacementStatus === 'higher'"
+                                [class.lower]="guess.displacementStatus === 'lower'"
+                            >
+                                <span class="cell-mobile-label">Cilindrada</span>
+                                <strong class="cell-value mono">{{ guess.motorcycle.displacementCc }} cc</strong>
+                                <span
+                                    class="attribute-result"
+                                    [class.correct]="guess.displacementStatus === 'correct'"
+                                    [class.higher]="guess.displacementStatus === 'higher'"
+                                    [class.lower]="guess.displacementStatus === 'lower'"
+                                >
+                                    {{ describeNumericStatus(guess.displacementStatus) }}
+                                </span>
+                            </div>
+
+                            <!-- Peso -->
+                            <div
+                                class="board-cell"
+                                [class.correct]="guess.weightStatus === 'correct'"
+                                [class.higher]="guess.weightStatus === 'higher'"
+                                [class.lower]="guess.weightStatus === 'lower'"
+                            >
+                                <span class="cell-mobile-label">Peso</span>
+                                <strong class="cell-value mono">{{ guess.motorcycle.weightKg }} kg</strong>
+                                <span
+                                    class="attribute-result"
+                                    [class.correct]="guess.weightStatus === 'correct'"
+                                    [class.higher]="guess.weightStatus === 'higher'"
+                                    [class.lower]="guess.weightStatus === 'lower'"
+                                >
+                                    {{ describeNumericStatus(guess.weightStatus) }}
+                                </span>
+                            </div>
+
+                            <!-- Estilo -->
+                            <div class="board-cell" [class.correct]="guess.styleStatus === 'correct'" [class.incorrect]="guess.styleStatus === 'incorrect'">
+                                <span class="cell-mobile-label">Estilo</span>
+                                <strong class="cell-value">{{ guess.motorcycle.style }}</strong>
+                                <span class="attribute-result" [class.correct]="guess.styleStatus === 'correct'" [class.incorrect]="guess.styleStatus === 'incorrect'">
+                                    {{ guess.styleStatus === 'correct' ? '✓ CORRETO' : '✗ INCORRETO' }}
+                                </span>
+                            </div>
+                        </div>
+                    }
+
+                    @for (slot of remainingSlots(); track slot) {
+                        <div class="board-row empty-row" aria-hidden="true">
+                            <div class="board-cell empty-cell"><span>{{ slot }}ª Tentativa</span></div>
+                            <div class="board-cell empty-cell"><span>—</span></div>
+                            <div class="board-cell empty-cell"><span>— cc</span></div>
+                            <div class="board-cell empty-cell"><span>— kg</span></div>
+                            <div class="board-cell empty-cell"><span>—</span></div>
+                        </div>
+                    }
+                </div>
+            </div>
+        } @else {
+            <!-- Aba de Rankings (Pilotos & Equipes) -->
+            <div class="rankings-arena-grid">
+                <div class="ranking-panel">
+                    <div class="ranking-panel-header">
+                        <h3>Ranking Geral de Pilotos</h3>
+                        <span>Pontuação acumulada nas partidas oficiais</span>
+                    </div>
+                    <div class="ranking-table">
+                        @for (pilot of pilotRankings; track pilot.position) {
+                            <div class="ranking-row" [class.current-user]="pilot.isCurrentUser">
+                                <span class="ranking-pos mono">{{ pilot.position }}º</span>
+                                <div class="ranking-pilot-info">
+                                    <strong>{{ pilot.name }}</strong>
+                                    <small>{{ pilot.teamName }}</small>
+                                </div>
+                                <strong class="ranking-pts mono">{{ pilot.points }} pts</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <div class="ranking-panel">
+                    <div class="ranking-panel-header">
+                        <h3>Ranking Coletivo de Equipes</h3>
+                        <span>Desempenho somado por fabricante</span>
+                    </div>
+                    <div class="ranking-table">
+                        @for (team of teamRankings; track team.teamId) {
+                            <div class="ranking-row" [class.current-user]="team.isCurrentTeam">
+                                <span class="ranking-pos mono">{{ team.position }}º</span>
+                                <div class="ranking-pilot-info">
+                                    <strong>{{ team.name }} {{ team.isCurrentTeam ? '(Sua Equipe)' : '' }}</strong>
+                                    <small>{{ team.manufacturer }} • {{ team.members }} pilotos</small>
+                                </div>
+                                <strong class="ranking-pts mono">{{ team.points }} pts</strong>
+                            </div>
+                        }
+                    </div>
+                </div>
+            </div>
+        }
     </div>
 </section>
 
@@ -19,10 +434,10 @@
             <div class="feature-preview-card">
                 <div class="feature-preview-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <circle cx="12" cy="12" r="9" />
+                        <circle cx="12" cy="12" r="9" />
                         <circle cx="12" cy="12" r="4.5" />
                         <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-                </svg>
+                    </svg>
                 </div>
                 <h3>Modo Diário</h3>
                 <p>Moto secreta única para todos os jogadores a cada dia</p>
@@ -30,8 +445,8 @@
             <div class="feature-preview-card">
                 <div class="feature-preview-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" />
-                </svg>
+                        <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" />
+                    </svg>
                 </div>
                 <h3>Modo Infinito</h3>
                 <p>Desafios contínuos com motos aleatórias do catálogo</p>
@@ -39,12 +454,12 @@
             <div class="feature-preview-card">
                 <div class="feature-preview-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
+                        <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
                         <path d="M7 6H5.5a2.5 2.5 0 0 0 0 5H7" />
                         <path d="M17 6h1.5a2.5 2.5 0 0 1 0 5H17" />
                         <path d="M12 14v3" />
                         <path d="M10 17.5h4l1 3.5H9l1-3.5Z" />
-                </svg>
+                    </svg>
                 </div>
                 <h3>Sistema de Equipes</h3>
                 <p>Represente sua fabricante e suba nos rankings coletivos</p>
@@ -52,10 +467,10 @@
             <div class="feature-preview-card">
                 <div class="feature-preview-icon">
                     <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                    <path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2H14.5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3Z" />
+                        <path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2H14.5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3Z" />
                         <path d="M9.5 19h5" />
                         <path d="M10.5 22h3" />
-                </svg>
+                    </svg>
                 </div>
                 <h3>Dicas Estratégicas</h3>
                 <p>Use FIPE e velocidade máxima com impacto na pontuação</p>
@@ -69,7 +484,7 @@
         <div class="cta-content">
             <h2>Pronto para acelerar seu conhecimento?</h2>
             <p>Teste sua expertise em motos esportivas brasileiras e descubra se você tem o que é preciso para ser o melhor piloto virtual.</p>
-            <a routerLink="/funcionalidades" class="btn btn-primary btn-lg">Comece Agora</a>
+            <button type="button" class="btn btn-primary btn-lg" (click)="scrollToArena('infinite')">Treinar no Modo Infinito</button>
         </div>
     </div>
 </section>

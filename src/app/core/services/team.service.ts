@@ -8,6 +8,10 @@ const TEAMS: Team[] = [
   { id: 2, name: 'Yamaha Blue', manufacturer: 'Yamaha' },
   { id: 3, name: 'Kawasaki Green', manufacturer: 'Kawasaki' },
   { id: 4, name: 'Suzuki Blue', manufacturer: 'Suzuki' },
+  { id: 5, name: 'BMW Motorrad', manufacturer: 'BMW' },
+  { id: 6, name: 'Ducati Corse', manufacturer: 'Ducati' },
+  { id: 7, name: 'Triumph Racing', manufacturer: 'Triumph' },
+  { id: 8, name: 'KTM Factory', manufacturer: 'KTM' },
 ];
 
 /**
@@ -34,7 +38,13 @@ export class TeamService {
       throw new Error('Equipe não encontrada.');
     }
 
-    localStorage.setItem(TEAM_STORAGE_PREFIX + user.id, String(teamId));
+    try {
+      if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+        localStorage.setItem(TEAM_STORAGE_PREFIX + user.id, String(teamId));
+      }
+    } catch {
+      // Ignora caso localStorage não esteja disponível
+    }
     return team;
   }
 
@@ -44,7 +54,14 @@ export class TeamService {
       return null;
     }
 
-    const rawTeamId = localStorage.getItem(TEAM_STORAGE_PREFIX + user.id);
+    let rawTeamId: string | null = null;
+    try {
+      if (typeof localStorage !== 'undefined' && typeof localStorage.getItem === 'function') {
+        rawTeamId = localStorage.getItem(TEAM_STORAGE_PREFIX + user.id);
+      }
+    } catch {
+      rawTeamId = null;
+    }
     const teamId = rawTeamId ? Number(rawTeamId) : Number.NaN;
 
     return TEAMS.find((t) => t.id === teamId) ?? null;
