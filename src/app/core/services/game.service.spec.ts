@@ -79,6 +79,7 @@ describe('GameService', () => {
       timeBonus: 250,
       hintBonus: 200,
       totalPoints: 1450,
+      aiChatUsed: false,
     });
 
     // 3 palpites (600) + 100s (200) + 2 dicas (-200) = 600
@@ -93,7 +94,15 @@ describe('GameService', () => {
       timeBonus: 200,
       hintBonus: -200,
       totalPoints: 600,
+      aiChatUsed: false,
     });
+
+    // Se usar o chat de IA do Gemini, a pontuação deve ser zerada
+    gameService.markAiChatUsed('infinite');
+    const round = gameService.getRound('infinite');
+    gameService.submitGuess('infinite', round.target.id, round.startedAtMs + 10_000);
+    expect(gameService.getRound('infinite').scoreBreakdown?.totalPoints).toBe(0);
+    expect(gameService.getRound('infinite').aiChatUsed).toBe(true);
   });
 
   it('deve vencer a partida ao acertar a moto secreta e registrar pontuação quando autenticado', () => {

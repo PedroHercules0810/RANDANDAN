@@ -14,5 +14,6 @@ export const environment = {
       "http://localhost:4200/",
       "https://pedrohercules.dengoso.web.ufersa.dev.br/"
     ]
-  }
+  },
+  "websocketUrl": "wss://api.pedrohercules.dengoso.web.ufersa.dev.br"
 };

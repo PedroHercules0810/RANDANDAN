@@ -29,6 +29,7 @@ export interface ScoreBreakdown {
   timeBonus: number;
   hintBonus: number;
   totalPoints: number;
+  aiChatUsed?: boolean;
 }
 
 export type RoundStatus = 'playing' | 'won' | 'lost';
@@ -39,6 +40,7 @@ export interface RoundState {
   status: RoundStatus;
   fipeHintUsed: boolean;
   topSpeedHintUsed: boolean;
+  aiChatUsed?: boolean;
   startedAtMs: number;
   elapsedSeconds: number;
   scoreBreakdown: ScoreBreakdown | null;

@@ -12,6 +12,7 @@ import {
 import { GameMode } from '../../core/models/score.model';
 import { AuthService } from '../../core/services/auth.service';
 import { GameService, MAX_ATTEMPTS } from '../../core/services/game.service';
+import { GeminiChatService } from '../../core/services/gemini-chat.service';
 import { MotorcycleService } from '../../core/services/motorcycle.service';
 import { TeamService } from '../../core/services/team.service';
 
@@ -28,10 +29,12 @@ export class Home implements OnInit, OnDestroy {
   private readonly motorcycleService = inject(MotorcycleService);
   private readonly gameService = inject(GameService);
   private readonly teamService = inject(TeamService);
+  protected readonly geminiChat = inject(GeminiChatService);
 
   protected readonly maxAttempts = MAX_ATTEMPTS;
   protected readonly activeArenaTab = signal<ArenaTab>('daily');
   protected readonly searchQuery = signal('');
+  protected readonly chatQuestion = signal('');
   protected readonly dropdownOpen = signal(false);
   protected readonly highlightedIndex = signal(0);
   protected readonly feedbackError = signal<string | null>(null);
@@ -207,6 +210,26 @@ export class Home implements OnInit, OnDestroy {
 
   protected revealTopSpeedHint(): void {
     this.gameService.useTopSpeedHint(this.activeMode());
+  }
+
+  protected async sendChatQuestion(): Promise<void> {
+    const question = this.chatQuestion().trim();
+    if (!question || this.geminiChat.isSending()) {
+      return;
+    }
+    this.chatQuestion.set('');
+    await this.geminiChat.sendQuestion(question, this.activeMode());
+  }
+
+  protected async sendQuickQuestion(question: string): Promise<void> {
+    if (this.geminiChat.isSending()) {
+      return;
+    }
+    await this.geminiChat.sendQuestion(question, this.activeMode());
+  }
+
+  protected async reconnectChatWebSocket(): Promise<void> {
+    await this.geminiChat.reconnect();
   }
 
   protected nextInfiniteChallenge(): void {

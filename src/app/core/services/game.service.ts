@@ -28,6 +28,7 @@ interface PersistedDailyRound {
   status: 'playing' | 'won' | 'lost';
   fipeHintUsed: boolean;
   topSpeedHintUsed: boolean;
+  aiChatUsed?: boolean;
   startedAtMs: number;
   elapsedSeconds: number;
   scoreBreakdown: ScoreBreakdown | null;
@@ -90,19 +91,22 @@ export class GameService {
    * - Palpites: 1=1000, 2=800, 3=600, 4=400, 5=200, 6=0
    * - Bônus de tempo: até 300 pts (300 - segundos decorridos)
    * - Dicas usadas: 0=+200, 1=+0, 2=-200
+   * - Se o Chat com IA (Gemini) foi usado na rodada, a pontuação final é ZERADA (0 pts).
    */
   calculateScore(params: {
     guessCount: number;
     elapsedSeconds: number;
     hintsUsed: number;
     won: boolean;
+    aiChatUsed?: boolean;
   }): ScoreBreakdown {
-    if (!params.won) {
+    if (!params.won || params.aiChatUsed) {
       return {
         guessPoints: 0,
         timeBonus: 0,
         hintBonus: 0,
         totalPoints: 0,
+        aiChatUsed: Boolean(params.aiChatUsed),
       };
     }
 
@@ -133,6 +137,7 @@ export class GameService {
       timeBonus,
       hintBonus,
       totalPoints,
+      aiChatUsed: false,
     };
   }
 
@@ -168,6 +173,7 @@ export class GameService {
         elapsedSeconds,
         hintsUsed,
         won: true,
+        aiChatUsed: current.aiChatUsed,
       });
     } else if (updatedGuesses.length >= MAX_ATTEMPTS) {
       status = 'lost';
@@ -176,6 +182,7 @@ export class GameService {
         elapsedSeconds,
         hintsUsed,
         won: false,
+        aiChatUsed: current.aiChatUsed,
       });
     }
 
@@ -221,6 +228,33 @@ export class GameService {
     this.setRound(mode, {
       ...current,
       topSpeedHintUsed: true,
+    });
+  }
+
+  /**
+   * Marca que o jogador utilizou o Chat de Dicas com IA (Gemini) nesta rodada,
+   * zerando imediatamente a pontuação da partida atual.
+   */
+  markAiChatUsed(mode: GameMode): void {
+    const current = this.getRound(mode);
+    if (current.aiChatUsed) {
+      return;
+    }
+
+    const zeroedBreakdown: ScoreBreakdown | null = current.scoreBreakdown
+      ? {
+          guessPoints: 0,
+          timeBonus: 0,
+          hintBonus: 0,
+          totalPoints: 0,
+          aiChatUsed: true,
+        }
+      : null;
+
+    this.setRound(mode, {
+      ...current,
+      aiChatUsed: true,
+      scoreBreakdown: zeroedBreakdown,
     });
   }
 
@@ -431,6 +465,7 @@ export class GameService {
         status: persisted.status,
         fipeHintUsed: persisted.fipeHintUsed,
         topSpeedHintUsed: persisted.topSpeedHintUsed,
+        aiChatUsed: Boolean(persisted.aiChatUsed),
         startedAtMs: persisted.startedAtMs,
         elapsedSeconds: persisted.elapsedSeconds,
         scoreBreakdown: persisted.scoreBreakdown,
@@ -443,6 +478,7 @@ export class GameService {
       status: 'playing',
       fipeHintUsed: false,
       topSpeedHintUsed: false,
+      aiChatUsed: false,
       startedAtMs: Date.now(),
       elapsedSeconds: 0,
       scoreBreakdown: null,
@@ -456,6 +492,7 @@ export class GameService {
       status: 'playing',
       fipeHintUsed: false,
       topSpeedHintUsed: false,
+      aiChatUsed: false,
       startedAtMs: Date.now(),
       elapsedSeconds: 0,
       scoreBreakdown: null,
@@ -476,6 +513,7 @@ export class GameService {
       status: round.status,
       fipeHintUsed: round.fipeHintUsed,
       topSpeedHintUsed: round.topSpeedHintUsed,
+      aiChatUsed: Boolean(round.aiChatUsed),
       startedAtMs: round.startedAtMs,
       elapsedSeconds: round.elapsedSeconds,
       scoreBreakdown: round.scoreBreakdown,

@@ -153,11 +153,148 @@
 
                 <div class="arena-hint-summary">
                     <span class="arena-hint-tag">IMPACTO DE DICAS</span>
-                    <strong class="mono" [class.positive]="currentHintBonusPreview() > 0" [class.negative]="currentHintBonusPreview() < 0">
-                        {{ currentHintBonusPreview() >= 0 ? '+' : '' }}{{ currentHintBonusPreview() }} PTS
-                    </strong>
-                    <small>{{ hintsUsedCount() }}/2 dicas utilizadas</small>
+                    @if (round.aiChatUsed) {
+                        <strong class="mono negative">0 PTS (IA)</strong>
+                        <small>Chat Gemini usado (zera pontuação)</small>
+                    } @else {
+                        <strong class="mono" [class.positive]="currentHintBonusPreview() > 0" [class.negative]="currentHintBonusPreview() < 0">
+                            {{ currentHintBonusPreview() >= 0 ? '+' : '' }}{{ currentHintBonusPreview() }} PTS
+                        </strong>
+                        <small>{{ hintsUsedCount() }}/2 dicas utilizadas</small>
+                    }
                 </div>
+            </div>
+
+            <!-- Chat de Dicas via WebSocket Autenticado (Amazon Cognito + API Gateway + AWS Lambda + Google Gemini) -->
+            <div class="gemini-chat-panel">
+                <div class="gemini-chat-header">
+                    <div class="gemini-chat-title-group">
+                        <span class="gemini-chat-badge">IA • GOOGLE GEMINI + AWS WEBSOCKET</span>
+                        <h3>Chefe de Box — Chat de Dicas (Rota $default)</h3>
+                        <p>Peça dicas sobre o catálogo e seus palpites. A IA não sabe qual é a moto do dia, mas <strong>usar o chat zera sua pontuação na rodada</strong>.</p>
+                    </div>
+
+                    <div class="gemini-ws-meta">
+                        <div
+                            class="ws-status-pill"
+                            [class.connected]="geminiChat.connectionStatus() === 'connected'"
+                            [class.connecting]="geminiChat.connectionStatus() === 'connecting'"
+                            [class.error]="geminiChat.connectionStatus() === 'error'"
+                        >
+                            <span class="ws-dot"></span>
+                            @if (geminiChat.connectionStatus() === 'connected') {
+                                WS CONECTADO • {{ geminiChat.websocketEndpoint() }}
+                            } @else if (geminiChat.connectionStatus() === 'connecting') {
+                                CONECTANDO WEBSOCKET...
+                            } @else if (geminiChat.connectionStatus() === 'error') {
+                                ERRO NA CONEXÃO WS
+                            } @else {
+                                WS DESCONECTADO
+                            }
+                        </div>
+
+                        @if (authState().status === 'authenticated') {
+                            <button
+                                type="button"
+                                class="hint-action-btn ws-reconnect-btn"
+                                (click)="reconnectChatWebSocket()"
+                            >
+                                ↻ Reconectar WebSocket
+                            </button>
+                        }
+                    </div>
+                </div>
+
+                @if (authState().status !== 'authenticated') {
+                    <div class="gemini-chat-auth-lock">
+                        <p>🔒 <strong>Autenticação Cognito necessária:</strong> Para gerar o token de acesso e estabelecer a conexão WebSocket autenticada com <code>{{ geminiChat.websocketEndpoint() }}</code>, entre na sua conta.</p>
+                        <a routerLink="/login" class="btn btn-primary">Entrar com Cognito / Google</a>
+                    </div>
+                } @else {
+                    <div class="gemini-chat-messages" role="log" aria-live="polite">
+                        @for (msg of geminiChat.messages(); track msg.id) {
+                            <div
+                                class="gemini-msg"
+                                [class.user]="msg.role === 'user'"
+                                [class.model]="msg.role === 'model'"
+                                [class.system]="msg.role === 'system'"
+                            >
+                                <div class="gemini-msg-meta">
+                                    <strong>
+                                        @if (msg.role === 'user') {
+                                            Você (Piloto)
+                                        } @else if (msg.role === 'model') {
+                                            🤖 Chefe de Box (Google Gemini)
+                                        } @else {
+                                            ⚡ Telemetria RANDANDAN
+                                        }
+                                    </strong>
+                                    <span class="mono">{{ msg.timestamp }}</span>
+                                </div>
+                                <p class="gemini-msg-text">{{ msg.text }}</p>
+                                @if (msg.candidatesRemaining !== undefined) {
+                                    <span class="gemini-candidates-pill">
+                                        {{ msg.candidatesRemaining }} moto(s) do catálogo compatíveis com suas pistas
+                                    </span>
+                                }
+                            </div>
+                        }
+
+                        @if (geminiChat.isSending()) {
+                            <div class="gemini-msg model loading">
+                                <div class="gemini-msg-meta">
+                                    <strong>🤖 Chefe de Box (Google Gemini)</strong>
+                                    <span class="mono">processando na AWS Lambda ($default)...</span>
+                                </div>
+                                <p class="gemini-msg-text">Consultando catálogo e telemetria via API Gateway WebSocket...</p>
+                            </div>
+                        }
+                    </div>
+
+                    @if (geminiChat.errorMessage(); as wsErr) {
+                        <p class="guess-error">{{ wsErr }}</p>
+                    }
+
+                    <div class="gemini-quick-questions">
+                        <span class="quick-label">Sugestões rápidas:</span>
+                        <button
+                            type="button"
+                            class="quick-chip"
+                            [disabled]="geminiChat.isSending()"
+                            (click)="sendQuickQuestion('Me dê uma dica para descobrir a moto secreta com base nos meus chutes até agora!')"
+                        >
+                            💡 Pedir dica com base nos meus chutes
+                        </button>
+                        <button
+                            type="button"
+                            class="quick-chip"
+                            [disabled]="geminiChat.isSending()"
+                            (click)="sendQuickQuestion('Quais motos do catálogo ainda são compatíveis com as pistas atuais?')"
+                        >
+                            🏍️ Quais motos ainda restam?
+                        </button>
+                    </div>
+
+                    <form class="gemini-chat-form" (ngSubmit)="sendChatQuestion()">
+                        <input
+                            type="text"
+                            name="chatQuestionInput"
+                            class="guess-input gemini-chat-input"
+                            placeholder="Envie uma pergunta pelo WebSocket para o Gemini (ex: Qual moto Naked tem mais de 600cc?)..."
+                            autocomplete="off"
+                            [ngModel]="chatQuestion()"
+                            (ngModelChange)="chatQuestion.set($event)"
+                            [disabled]="geminiChat.isSending()"
+                        />
+                        <button
+                            type="submit"
+                            class="btn btn-primary gemini-send-btn"
+                            [disabled]="geminiChat.isSending() || !chatQuestion().trim()"
+                        >
+                            {{ geminiChat.isSending() ? 'Enviando...' : 'Enviar Pergunta (Zera Pontos)' }}
+                        </button>
+                    </form>
+                }
             </div>
 
             <!-- Campo de Busca / Autocomplete de Palpite -->

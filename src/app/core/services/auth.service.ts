@@ -194,6 +194,21 @@ export class AuthService {
   }
 
   /**
+   * Obtém o Token de Acesso (Access Token / ID Token JWT) gerado pelo Amazon Cognito
+   * para autenticar a conexão WebSocket com o Amazon API Gateway.
+   */
+  async getAccessToken(): Promise<string | null> {
+    try {
+      const session = await fetchAuthSession();
+      const accessToken = session.tokens?.accessToken?.toString();
+      const idToken = session.tokens?.idToken?.toString();
+      return accessToken ?? idToken ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Escuta eventos de autenticação do Amplify Hub para reagir à conclusão
    * (ou falha) assíncrona do fluxo OAuth (`signInWithRedirect`).
    */

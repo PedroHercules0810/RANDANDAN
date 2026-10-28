@@ -92,6 +92,9 @@ const environment = {
     redirectSignIn: splitList(values.NG_APP_OAUTH_REDIRECT_SIGN_IN || 'http://localhost:4200/login'),
     redirectSignOut: splitList(values.NG_APP_OAUTH_REDIRECT_SIGN_OUT || 'http://localhost:4200/'),
   },
+  websocketUrl:
+    readValue('NG_APP_WEBSOCKET_URL', fileVariables) ||
+    'wss://api.pedrohercules.dengoso.web.ufersa.dev.br',
 };
 
 const output = `// GERADO AUTOMATICAMENTE por scripts/generate-env.mjs — não edite manualmente.
