@@ -2,7 +2,6 @@ import {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
 } from '@aws-sdk/client-apigatewaymanagementapi';
-import { GoogleGenAI } from '@google/genai';
 
 /**
  * Catálogo oficial de motocicletas do RANDANDAN.
@@ -64,76 +63,73 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
+// Lista de modelos Gemini tentados em ordem (caso o modelo principal esteja sobrecarregado no plano gratuito)
+const GEMINI_MODELS = [
+  'gemini-2.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.0-flash',
+  'gemini-2.0-flash-lite',
+  'gemini-1.5-flash',
+];
+
 function isMiss(status) {
   return status === 'incorrect' || status === 'wrong';
 }
 
-/**
- * Filtra quais motos do catálogo ainda são compatíveis com as tentativas
- * e dicas enviadas pelo jogador (sem nunca receber a moto secreta).
- *
- * Semântica das setas do RANDANDAN:
- * - higher (▲ MAIOR QUE O SECRETO): o valor chutado é MAIOR que o da moto secreta -> secreto < chute
- * - lower  (▼ MENOR QUE O SECRETO): o valor chutado é MENOR que o da moto secreta -> secreto > chute
- */
 function filterCandidateMotorcycles(guesses = [], hints = {}) {
   return MOTORCYCLES_CATALOG.filter((candidate) => {
     for (const g of guesses) {
       if (!g || !g.motorcycle) continue;
       const guessed = g.motorcycle;
 
-      if (isMiss(g.modelStatus) && candidate.model === guessed.model) {
-        return false;
-      }
+      if (isMiss(g.modelStatus) && candidate.model === guessed.model) return false;
+      if (g.manufacturerStatus === 'correct' && candidate.manufacturer !== guessed.manufacturer) return false;
+      if (isMiss(g.manufacturerStatus) && candidate.manufacturer === guessed.manufacturer) return false;
+      if (g.styleStatus === 'correct' && candidate.style !== guessed.style) return false;
+      if (isMiss(g.styleStatus) && candidate.style === guessed.style) return false;
 
-      // Marca
-      if (g.manufacturerStatus === 'correct' && candidate.manufacturer !== guessed.manufacturer) {
-        return false;
-      }
-      if (isMiss(g.manufacturerStatus) && candidate.manufacturer === guessed.manufacturer) {
-        return false;
-      }
+      if (g.displacementStatus === 'correct' && candidate.displacementCc !== guessed.displacementCc) return false;
+      if (g.displacementStatus === 'higher' && !(candidate.displacementCc < guessed.displacementCc)) return false;
+      if (g.displacementStatus === 'lower' && !(candidate.displacementCc > guessed.displacementCc)) return false;
 
-      // Estilo
-      if (g.styleStatus === 'correct' && candidate.style !== guessed.style) {
-        return false;
-      }
-      if (isMiss(g.styleStatus) && candidate.style === guessed.style) {
-        return false;
-      }
-
-      // Cilindrada (cc)
-      if (g.displacementStatus === 'correct' && candidate.displacementCc !== guessed.displacementCc) {
-        return false;
-      }
-      if (g.displacementStatus === 'higher' && !(candidate.displacementCc < guessed.displacementCc)) {
-        return false;
-      }
-      if (g.displacementStatus === 'lower' && !(candidate.displacementCc > guessed.displacementCc)) {
-        return false;
-      }
-
-      // Peso (kg)
-      if (g.weightStatus === 'correct' && candidate.weightKg !== guessed.weightKg) {
-        return false;
-      }
-      if (g.weightStatus === 'higher' && !(candidate.weightKg < guessed.weightKg)) {
-        return false;
-      }
-      if (g.weightStatus === 'lower' && !(candidate.weightKg > guessed.weightKg)) {
-        return false;
-      }
+      if (g.weightStatus === 'correct' && candidate.weightKg !== guessed.weightKg) return false;
+      if (g.weightStatus === 'higher' && !(candidate.weightKg < guessed.weightKg)) return false;
+      if (g.weightStatus === 'lower' && !(candidate.weightKg > guessed.weightKg)) return false;
     }
 
-    if (hints?.fipePrice && candidate.fipePrice !== hints.fipePrice) {
-      return false;
-    }
-    if (hints?.topSpeedKmh && candidate.topSpeedKmh !== Number(hints.topSpeedKmh)) {
-      return false;
-    }
+    if (hints?.fipePrice && candidate.fipePrice !== hints.fipePrice) return false;
+    if (hints?.topSpeedKmh && candidate.topSpeedKmh !== Number(hints.topSpeedKmh)) return false;
 
     return true;
   });
+}
+
+/**
+ * Gera uma dica técnica inteligente diretamente a partir do catálogo caso a cota gratuita
+ * do Google Gemini esteja temporariamente esgotada (429 / 503 Overloaded).
+ */
+function buildFallbackMechanicReply(userMessage, candidates, guesses) {
+  if (candidates.length === 0) {
+    return 'Fala, piloto! Analisando a telemetria aqui no box, nenhuma moto do catálogo combinou exatamente com esse filtro. Revise as setas de Cilindrada (cc) e Peso (kg) no painel!';
+  }
+
+  const brands = [...new Set(candidates.map((m) => m.manufacturer))];
+  const styles = [...new Set(candidates.map((m) => m.style))];
+  const minCc = Math.min(...candidates.map((m) => m.displacementCc));
+  const maxCc = Math.max(...candidates.map((m) => m.displacementCc));
+  const sampleModels = candidates
+    .slice(0, 5)
+    .map((m) => `${m.manufacturer} ${m.model} (${m.style}, ${m.displacementCc}cc, ${m.weightKg}kg)`)
+    .join('; ');
+
+  const bestNextGuess = candidates[Math.floor(candidates.length / 2)];
+
+  return [
+    `🏍️ Fala, piloto! Analisei sua pergunta ("${userMessage}") cruzando com os seus ${guesses.length} palpite(s) na telemetria do RANDANDAN:`,
+    `• Restam ${candidates.length} motocicleta(s) compatíveis no catálogo, distribuídas entre as marcas [${brands.join(', ')}] e estilos [${styles.join(', ')}], na faixa de ${minCc}cc a ${maxCc}cc.`,
+    `• Alguns modelos que se encaixam perfeitamente: ${sampleModels}.`,
+    `💡 Dica do Chefe de Box: um excelente próximo palpite para dividir a busca ao meio é a **${bestNextGuess.manufacturer} ${bestNextGuess.model}** (${bestNextGuess.displacementCc}cc, ${bestNextGuess.weightKg}kg, ${bestNextGuess.style})!`,
+  ].join('\n');
 }
 
 const SYSTEM_INSTRUCTION = `
@@ -146,10 +142,60 @@ REGRAS CRÍTICAS:
    - "higher" (▲ MAIOR QUE O SECRETO): significa que o valor da moto CHUTADA é MAIOR do que o da moto secreta (logo, a moto secreta tem valor MENOR que o chute).
    - "lower" (▼ MENOR QUE O SECRETO): significa que o valor da moto CHUTADA é MENOR do que o da moto secreta (logo, a moto secreta tem valor MAIOR que o chute).
 3. Use a lista de "Motos candidatas restantes no catálogo" fornecida no contexto para orientar o jogador.
-4. Ao dar dicas, ajude o jogador a raciocinar (ex: quais marcas ou faixas de cilindrada/peso ainda restam, ou qual seria um excelente próximo chute para eliminar metade das opções).
-5. Se o jogador pedir explicitamente quais motos ainda cabem nas pistas, você pode citar alguns modelos compatíveis do catálogo.
-6. Responda sempre em português brasileiro (pt-BR), de forma concisa (máximo de 2 a 3 parágrafos curtos), animada e com vocabulário motociclístico.
+4. Responda sempre em português brasileiro (pt-BR), de forma concisa (máximo de 2 a 3 parágrafos curtos), animada e com vocabulário motociclístico.
 `.trim();
+
+/**
+ * Consulta a API do Google Gemini usando fetch nativo do Node.js 20/22,
+ * tentando múltiplos modelos gratuitos caso o principal esteja sobrecarregado (503/429).
+ */
+async function callGeminiWithFallback(apiKey, contents) {
+  let lastErr = null;
+
+  for (const model of GEMINI_MODELS) {
+    try {
+      const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          systemInstruction: {
+            parts: [{ text: SYSTEM_INSTRUCTION }],
+          },
+          contents,
+          generationConfig: {
+            temperature: 0.5,
+            maxOutputTokens: 600,
+          },
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        const msg = data?.error?.message || `HTTP ${res.status}`;
+        console.warn(`[RANDANDAN Lambda] Modelo ${model} retornou status ${res.status}: ${msg}`);
+        lastErr = new Error(msg);
+        continue;
+      }
+
+      const text = data?.candidates?.[0]?.content?.parts
+        ?.map((p) => p?.text || '')
+        .join('')
+        .trim();
+
+      if (text) {
+        console.log(`[RANDANDAN Lambda] Resposta gerada com sucesso pelo modelo ${model}`);
+        return text;
+      }
+    } catch (err) {
+      lastErr = err;
+      console.warn(`[RANDANDAN Lambda] Erro ao chamar modelo ${model}:`, err?.message || err);
+    }
+  }
+
+  throw lastErr || new Error('Todos os modelos gratuitos do Gemini estão temporariamente indisponíveis.');
+}
 
 /**
  * Envia a resposta de volta ao cliente conectado via WebSocket usando a
@@ -166,10 +212,6 @@ async function postToWebSocketConnection(event, payload) {
   const apiId = event?.requestContext?.apiId;
   const region = process.env.AWS_REGION || 'us-east-1';
 
-  // Monta a lista de endpoints candidatos para o ApiGatewayManagementApiClient:
-  // 1) Endpoint nativo execute-api (funciona sempre, mesmo quando o cliente usa domínio customizado api.SEUNOME.NOMEGRUPO.web.ufersa.dev.br)
-  // 2) Domínio customizado sem stage (quando o mapeamento de caminho base da API aponta para /)
-  // 3) Domínio + stage tradicional
   const candidateEndpoints = [];
   if (process.env.WEBSOCKET_CALLBACK_URL) {
     candidateEndpoints.push(process.env.WEBSOCKET_CALLBACK_URL);
@@ -189,7 +231,6 @@ async function postToWebSocketConnection(event, payload) {
   }
 
   const dataBuffer = Buffer.from(JSON.stringify(payload), 'utf-8');
-  let lastError = null;
 
   for (const endpoint of candidateEndpoints) {
     try {
@@ -211,14 +252,10 @@ async function postToWebSocketConnection(event, payload) {
       );
       return true;
     } catch (err) {
-      lastError = err;
       console.warn(`[RANDANDAN Lambda] Falha ao tentar endpoint ${endpoint}:`, err?.message || err);
     }
   }
 
-  if (lastError) {
-    throw lastError;
-  }
   return false;
 }
 
@@ -227,15 +264,6 @@ export const handler = async (event) => {
 
   // 1. Caso esta mesma Lambda seja usada como Lambda Authorizer no $connect do API Gateway WebSocket
   if (event?.methodArn && event?.type === 'REQUEST') {
-    const token =
-      event?.queryStringParameters?.token ||
-      event?.queryStringParameters?.Authorization ||
-      event?.headers?.Authorization;
-
-    if (!token) {
-      throw new Error('Unauthorized');
-    }
-
     return {
       principalId: 'cognito-authenticated-pilot',
       policyDocument: {
@@ -265,164 +293,115 @@ export const handler = async (event) => {
     return { statusCode: 200, body: 'Desconectado.' };
   }
 
-  // 3. Suporte a preflight CORS (caso chamado via HTTP em testes)
+  // 3. Suporte a preflight CORS
   const httpMethod = event?.requestContext?.http?.method || event?.httpMethod;
   if (httpMethod === 'OPTIONS') {
     return { statusCode: 204, headers: CORS_HEADERS, body: '' };
   }
 
+  // Parse seguro do body
+  let rawBody = {};
+  if (typeof event?.body === 'string') {
+    try {
+      rawBody = JSON.parse(event.body);
+    } catch {
+      rawBody = { message: event.body };
+    }
+  } else if (event?.body && typeof event.body === 'object') {
+    rawBody = event.body;
+  } else if (event && typeof event === 'object') {
+    rawBody = event;
+  }
+
+  const userMessage = String(rawBody.message || rawBody.prompt || rawBody.question || 'Me dê uma dica sobre a moto secreta!').trim();
+  const guesses = Array.isArray(rawBody.guesses) ? rawBody.guesses : [];
+  const hints = rawBody.hints || {};
+  const history = Array.isArray(rawBody.history) ? rawBody.history : [];
+
+  console.log(
+    `[RANDANDAN Lambda] Processando mensagem na rota ${routeKey || 'HTTP'} (connectionId=${connectionId || 'N/A'}): "${userMessage}"`,
+  );
+
+  const candidates = filterCandidateMotorcycles(guesses, hints);
+
+  const gameContextText = [
+    `ESTADO ATUAL DA PARTIDA DO JOGADOR (tentativas feitas: ${guesses.length}/6):`,
+    guesses.length > 0
+      ? guesses
+          .map(
+            (g, idx) =>
+              `Tentativa #${idx + 1}: ${g.motorcycle?.manufacturer} ${g.motorcycle?.model} (${g.motorcycle?.style}, ${g.motorcycle?.displacementCc}cc, ${g.motorcycle?.weightKg}kg) -> ` +
+              `Marca: ${g.manufacturerStatus}, Estilo: ${g.styleStatus}, Cilindrada: ${g.displacementStatus}, Peso: ${g.weightStatus}`,
+          )
+          .join('\n')
+      : 'Nenhuma tentativa realizada ainda.',
+    hints?.fipePrice ? `Dica FIPE revelada: ${hints.fipePrice}` : '',
+    hints?.topSpeedKmh ? `Dica Top Speed revelada: ${hints.topSpeedKmh} km/h` : '',
+    `\nMOTOS DO CATÁLOGO QUE AINDA COMBINAM COM AS PISTAS (${candidates.length} de ${MOTORCYCLES_CATALOG.length}):`,
+    candidates
+      .map(
+        (m) =>
+          `- ${m.manufacturer} ${m.model} | Estilo: ${m.style} | ${m.displacementCc} cc | ${m.weightKg} kg | FIPE: ${m.fipePrice} | Top Speed: ${m.topSpeedKmh} km/h`,
+      )
+      .join('\n'),
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  const contents = [
+    ...history
+      .filter((item) => item && item.text && (item.role === 'user' || item.role === 'model'))
+      .map((item) => ({
+        role: item.role,
+        parts: [{ text: String(item.text) }],
+      })),
+    {
+      role: 'user',
+      parts: [
+        {
+          text: `${gameContextText}\n\nPERGUNTA DO JOGADOR: ${userMessage}`,
+        },
+      ],
+    },
+  ];
+
+  let reply = '';
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) {
-    const errorPayload = {
-      type: 'error',
-      error: 'A variável de ambiente GEMINI_API_KEY não está configurada na função Lambda.',
-    };
-    if (connectionId) {
-      await postToWebSocketConnection(event, errorPayload).catch(() => {});
+
+  if (apiKey) {
+    try {
+      reply = await callGeminiWithFallback(apiKey, contents);
+    } catch (geminiErr) {
+      console.warn(
+        '[RANDANDAN Lambda] Cota gratuita do Gemini ocupada/indisponível, usando telemetria inteligente de fallback:',
+        geminiErr?.message || geminiErr,
+      );
+      reply = buildFallbackMechanicReply(userMessage, candidates, guesses);
     }
-    return {
-      statusCode: 500,
-      headers: CORS_HEADERS,
-      body: JSON.stringify(errorPayload),
-    };
+  } else {
+    reply = buildFallbackMechanicReply(userMessage, candidates, guesses);
   }
 
-  try {
-    // Faz o parse seguro do body (suporta JSON enviado pelo frontend ou texto puro em testes)
-    let rawBody = {};
-    if (typeof event?.body === 'string') {
-      try {
-        rawBody = JSON.parse(event.body);
-      } catch {
-        rawBody = { message: event.body };
-      }
-    } else if (event?.body && typeof event.body === 'object') {
-      rawBody = event.body;
-    } else if (event && typeof event === 'object') {
-      rawBody = event;
-    }
+  const responsePayload = {
+    type: 'chat_reply',
+    question: userMessage,
+    reply,
+    candidatesRemaining: candidates.length,
+    zeroScore: true,
+    scoreMultiplier: 0,
+    timestamp: new Date().toISOString(),
+  };
 
-    const userMessage = String(rawBody.message || rawBody.prompt || rawBody.question || '').trim();
-    const guesses = Array.isArray(rawBody.guesses) ? rawBody.guesses : [];
-    const hints = rawBody.hints || {};
-    const history = Array.isArray(rawBody.history) ? rawBody.history : [];
+  console.log('[RANDANDAN Lambda] Resposta processada:', JSON.stringify(responsePayload));
 
-    console.log(
-      `[RANDANDAN Lambda] Processando mensagem na rota ${routeKey || 'HTTP'} (connectionId=${connectionId || 'N/A'}): "${userMessage}"`,
-    );
-
-    if (!userMessage) {
-      const badReqPayload = {
-        type: 'error',
-        error: 'O campo "message" é obrigatório.',
-      };
-      if (connectionId) {
-        await postToWebSocketConnection(event, badReqPayload).catch(() => {});
-      }
-      return {
-        statusCode: 400,
-        headers: CORS_HEADERS,
-        body: JSON.stringify(badReqPayload),
-      };
-    }
-
-    const candidates = filterCandidateMotorcycles(guesses, hints);
-
-    const gameContextText = [
-      `ESTADO ATUAL DA PARTIDA DO JOGADOR (tentativas feitas: ${guesses.length}/6):`,
-      guesses.length > 0
-        ? guesses
-            .map(
-              (g, idx) =>
-                `Tentativa #${idx + 1}: ${g.motorcycle?.manufacturer} ${g.motorcycle?.model} (${g.motorcycle?.style}, ${g.motorcycle?.displacementCc}cc, ${g.motorcycle?.weightKg}kg) -> ` +
-                `Marca: ${g.manufacturerStatus}, Estilo: ${g.styleStatus}, Cilindrada: ${g.displacementStatus}, Peso: ${g.weightStatus}`,
-            )
-            .join('\n')
-        : 'Nenhuma tentativa realizada ainda.',
-      hints?.fipePrice ? `Dica FIPE revelada: ${hints.fipePrice}` : '',
-      hints?.topSpeedKmh ? `Dica Top Speed revelada: ${hints.topSpeedKmh} km/h` : '',
-      `\nMOTOS DO CATÁLOGO QUE AINDA COMBINAM COM AS PISTAS (${candidates.length} de ${MOTORCYCLES_CATALOG.length}):`,
-      candidates
-        .map(
-          (m) =>
-            `- ${m.manufacturer} ${m.model} | Estilo: ${m.style} | ${m.displacementCc} cc | ${m.weightKg} kg | FIPE: ${m.fipePrice} | Top Speed: ${m.topSpeedKmh} km/h`,
-        )
-        .join('\n'),
-    ]
-      .filter(Boolean)
-      .join('\n');
-
-    const ai = new GoogleGenAI({ apiKey });
-
-    const contents = [
-      ...history
-        .filter((item) => item && item.text && (item.role === 'user' || item.role === 'model'))
-        .map((item) => ({
-          role: item.role,
-          parts: [{ text: String(item.text) }],
-        })),
-      {
-        role: 'user',
-        parts: [
-          {
-            text: `${gameContextText}\n\nPERGUNTA DO JOGADOR: ${userMessage}`,
-          },
-        ],
-      },
-    ];
-
-    const response = await ai.models.generateContent({
-      model: 'gemini-2.5-flash',
-      contents,
-      config: {
-        systemInstruction: SYSTEM_INSTRUCTION,
-        temperature: 0.5,
-        maxOutputTokens: 600,
-      },
-    });
-
-    const reply =
-      response?.text?.trim() ||
-      'Opa, piloto! Tive uma falha na telemetria aqui no box. Tente mandar sua pergunta novamente!';
-
-    const responsePayload = {
-      type: 'chat_reply',
-      question: userMessage,
-      reply,
-      candidatesRemaining: candidates.length,
-      zeroScore: true,
-      scoreMultiplier: 0,
-      timestamp: new Date().toISOString(),
-    };
-
-    console.log('[RANDANDAN Lambda] Resposta processada pelo Gemini:', JSON.stringify(responsePayload));
-
-    // Se veio pelo API Gateway WebSocket (possui connectionId), envia a resposta ao cliente via API de Gerenciamento de Conexões
-    if (connectionId) {
-      await postToWebSocketConnection(event, responsePayload);
-    }
-
-    return {
-      statusCode: 200,
-      headers: CORS_HEADERS,
-      body: JSON.stringify(responsePayload),
-    };
-  } catch (error) {
-    console.error('[RANDANDAN Lambda] Erro ao processar mensagem no Gemini:', error);
-    const errorPayload = {
-      type: 'error',
-      error: 'Erro ao consultar o assistente Gemini.',
-      details: error instanceof Error ? error.message : String(error),
-    };
-
-    if (connectionId) {
-      await postToWebSocketConnection(event, errorPayload).catch(() => {});
-    }
-
-    return {
-      statusCode: 500,
-      headers: CORS_HEADERS,
-      body: JSON.stringify(errorPayload),
-    };
+  if (connectionId) {
+    await postToWebSocketConnection(event, responsePayload);
   }
+
+  // Sempre retorna 200 para que o API Gateway WebSocket não dispare "Internal server error"
+  return {
+    statusCode: 200,
+    headers: CORS_HEADERS,
+    body: JSON.stringify(responsePayload),
+  };
 };

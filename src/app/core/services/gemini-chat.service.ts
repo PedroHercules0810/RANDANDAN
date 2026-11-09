@@ -277,6 +277,13 @@ export class GeminiChatService {
         return;
       }
 
+      if (parsed.message === 'Internal server error') {
+        this.errorSignal.set(
+          'A rota $default do API Gateway retornou "Internal server error". Atualize o código da função Lambda (index.mjs) e verifique a permissão AmazonAPIGatewayInvokeFullAccess na Role da Lambda.',
+        );
+        return;
+      }
+
       const replyText =
         parsed.reply ||
         parsed.message ||
