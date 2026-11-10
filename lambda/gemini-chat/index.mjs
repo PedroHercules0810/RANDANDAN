@@ -3,13 +3,7 @@ import {
   PostToConnectionCommand,
 } from '@aws-sdk/client-apigatewaymanagementapi';
 
-/**
- * Catálogo oficial de motocicletas do RANDANDAN.
- * A função Lambda NÃO sabe e NÃO calcula qual é a moto secreta do dia/rodada;
- * ela apenas conhece o catálogo geral e analisa as pistas já obtidas pelo jogador.
- */
 const MOTORCYCLES_CATALOG = [
-  // Honda
   { manufacturer: 'Honda', model: 'CBR 1000RR-R Fireblade', displacementCc: 1000, weightKg: 201, style: 'Sport', fipePrice: 'R$ 189.900', topSpeedKmh: 299 },
   { manufacturer: 'Honda', model: 'CBR 650R', displacementCc: 649, weightKg: 208, style: 'Sport', fipePrice: 'R$ 56.900', topSpeedKmh: 225 },
   { manufacturer: 'Honda', model: 'CB 650R', displacementCc: 649, weightKg: 202, style: 'Naked', fipePrice: 'R$ 53.800', topSpeedKmh: 220 },
@@ -19,7 +13,6 @@ const MOTORCYCLES_CATALOG = [
   { manufacturer: 'Honda', model: 'CG 160 Titan', displacementCc: 162, weightKg: 117, style: 'Street', fipePrice: 'R$ 18.890', topSpeedKmh: 128 },
   { manufacturer: 'Honda', model: 'XRE 300 Sahara', displacementCc: 293, weightKg: 147, style: 'Trail', fipePrice: 'R$ 29.590', topSpeedKmh: 148 },
   { manufacturer: 'Honda', model: 'CRF 1100L Africa Twin', displacementCc: 1084, weightKg: 226, style: 'Trail', fipePrice: 'R$ 92.900', topSpeedKmh: 210 },
-  // Yamaha
   { manufacturer: 'Yamaha', model: 'YZF-R1', displacementCc: 998, weightKg: 201, style: 'Sport', fipePrice: 'R$ 138.900', topSpeedKmh: 299 },
   { manufacturer: 'Yamaha', model: 'YZF-R3', displacementCc: 321, weightKg: 171, style: 'Sport', fipePrice: 'R$ 34.890', topSpeedKmh: 188 },
   { manufacturer: 'Yamaha', model: 'YZF-R15', displacementCc: 155, weightKg: 141, style: 'Sport', fipePrice: 'R$ 21.790', topSpeedKmh: 145 },
@@ -29,7 +22,6 @@ const MOTORCYCLES_CATALOG = [
   { manufacturer: 'Yamaha', model: 'Fazer FZ25', displacementCc: 249, weightKg: 149, style: 'Street', fipePrice: 'R$ 23.490', topSpeedKmh: 142 },
   { manufacturer: 'Yamaha', model: 'Lander 250', displacementCc: 249, weightKg: 153, style: 'Trail', fipePrice: 'R$ 26.890', topSpeedKmh: 138 },
   { manufacturer: 'Yamaha', model: 'Tracer 900 GT', displacementCc: 847, weightKg: 215, style: 'Touring', fipePrice: 'R$ 69.490', topSpeedKmh: 225 },
-  // Kawasaki
   { manufacturer: 'Kawasaki', model: 'Ninja ZX-10R', displacementCc: 998, weightKg: 207, style: 'Sport', fipePrice: 'R$ 119.990', topSpeedKmh: 299 },
   { manufacturer: 'Kawasaki', model: 'Ninja ZX-6R', displacementCc: 636, weightKg: 198, style: 'Sport', fipePrice: 'R$ 77.990', topSpeedKmh: 260 },
   { manufacturer: 'Kawasaki', model: 'Ninja 650', displacementCc: 649, weightKg: 193, style: 'Sport', fipePrice: 'R$ 49.990', topSpeedKmh: 212 },
@@ -38,17 +30,14 @@ const MOTORCYCLES_CATALOG = [
   { manufacturer: 'Kawasaki', model: 'Z650', displacementCc: 649, weightKg: 188, style: 'Naked', fipePrice: 'R$ 47.490', topSpeedKmh: 210 },
   { manufacturer: 'Kawasaki', model: 'Z400', displacementCc: 399, weightKg: 167, style: 'Naked', fipePrice: 'R$ 34.490', topSpeedKmh: 188 },
   { manufacturer: 'Kawasaki', model: 'Versys 650', displacementCc: 649, weightKg: 219, style: 'Touring', fipePrice: 'R$ 55.990', topSpeedKmh: 200 },
-  // Suzuki
   { manufacturer: 'Suzuki', model: 'Hayabusa 1300', displacementCc: 1340, weightKg: 264, style: 'Sport', fipePrice: 'R$ 124.500', topSpeedKmh: 299 },
   { manufacturer: 'Suzuki', model: 'GSX-S1000', displacementCc: 999, weightKg: 214, style: 'Naked', fipePrice: 'R$ 79.900', topSpeedKmh: 250 },
   { manufacturer: 'Suzuki', model: 'GSX-S750', displacementCc: 749, weightKg: 213, style: 'Naked', fipePrice: 'R$ 54.900', topSpeedKmh: 230 },
   { manufacturer: 'Suzuki', model: 'V-Strom 650 XT', displacementCc: 645, weightKg: 216, style: 'Trail', fipePrice: 'R$ 56.900', topSpeedKmh: 195 },
-  // BMW
   { manufacturer: 'BMW', model: 'S 1000 RR', displacementCc: 999, weightKg: 197, style: 'Sport', fipePrice: 'R$ 129.900', topSpeedKmh: 303 },
   { manufacturer: 'BMW', model: 'R 1250 GS', displacementCc: 1254, weightKg: 249, style: 'Trail', fipePrice: 'R$ 112.900', topSpeedKmh: 219 },
   { manufacturer: 'BMW', model: 'F 850 GS', displacementCc: 853, weightKg: 229, style: 'Trail', fipePrice: 'R$ 74.500', topSpeedKmh: 204 },
   { manufacturer: 'BMW', model: 'G 310 R', displacementCc: 313, weightKg: 164, style: 'Naked', fipePrice: 'R$ 34.900', topSpeedKmh: 143 },
-  // Ducati, Triumph & KTM
   { manufacturer: 'Ducati', model: 'Panigale V4 S', displacementCc: 1103, weightKg: 195, style: 'Sport', fipePrice: 'R$ 169.900', topSpeedKmh: 305 },
   { manufacturer: 'Ducati', model: 'Monster 937', displacementCc: 937, weightKg: 188, style: 'Naked', fipePrice: 'R$ 86.900', topSpeedKmh: 230 },
   { manufacturer: 'Triumph', model: 'Street Triple 765 RS', displacementCc: 765, weightKg: 188, style: 'Naked', fipePrice: 'R$ 68.990', topSpeedKmh: 240 },
@@ -63,13 +52,11 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-// Lista de modelos Gemini tentados em ordem (caso o modelo principal esteja sobrecarregado no plano gratuito)
+// Modelos rápidos com timeout curto (4.5s cada) para nunca estourar os 29s do API Gateway
 const GEMINI_MODELS = [
-  'gemini-2.5-flash',
-  'gemini-2.5-flash-lite',
   'gemini-2.0-flash',
-  'gemini-2.0-flash-lite',
-  'gemini-1.5-flash',
+  'gemini-2.5-flash-lite',
+  'gemini-2.5-flash',
 ];
 
 function isMiss(status) {
@@ -81,38 +68,28 @@ function filterCandidateMotorcycles(guesses = [], hints = {}) {
     for (const g of guesses) {
       if (!g || !g.motorcycle) continue;
       const guessed = g.motorcycle;
-
       if (isMiss(g.modelStatus) && candidate.model === guessed.model) return false;
       if (g.manufacturerStatus === 'correct' && candidate.manufacturer !== guessed.manufacturer) return false;
       if (isMiss(g.manufacturerStatus) && candidate.manufacturer === guessed.manufacturer) return false;
       if (g.styleStatus === 'correct' && candidate.style !== guessed.style) return false;
       if (isMiss(g.styleStatus) && candidate.style === guessed.style) return false;
-
       if (g.displacementStatus === 'correct' && candidate.displacementCc !== guessed.displacementCc) return false;
       if (g.displacementStatus === 'higher' && !(candidate.displacementCc < guessed.displacementCc)) return false;
       if (g.displacementStatus === 'lower' && !(candidate.displacementCc > guessed.displacementCc)) return false;
-
       if (g.weightStatus === 'correct' && candidate.weightKg !== guessed.weightKg) return false;
       if (g.weightStatus === 'higher' && !(candidate.weightKg < guessed.weightKg)) return false;
       if (g.weightStatus === 'lower' && !(candidate.weightKg > guessed.weightKg)) return false;
     }
-
     if (hints?.fipePrice && candidate.fipePrice !== hints.fipePrice) return false;
     if (hints?.topSpeedKmh && candidate.topSpeedKmh !== Number(hints.topSpeedKmh)) return false;
-
     return true;
   });
 }
 
-/**
- * Gera uma dica técnica inteligente diretamente a partir do catálogo caso a cota gratuita
- * do Google Gemini esteja temporariamente esgotada (429 / 503 Overloaded).
- */
 function buildFallbackMechanicReply(userMessage, candidates, guesses) {
   if (candidates.length === 0) {
     return 'Fala, piloto! Analisando a telemetria aqui no box, nenhuma moto do catálogo combinou exatamente com esse filtro. Revise as setas de Cilindrada (cc) e Peso (kg) no painel!';
   }
-
   const brands = [...new Set(candidates.map((m) => m.manufacturer))];
   const styles = [...new Set(candidates.map((m) => m.style))];
   const minCc = Math.min(...candidates.map((m) => m.displacementCc));
@@ -121,261 +98,165 @@ function buildFallbackMechanicReply(userMessage, candidates, guesses) {
     .slice(0, 5)
     .map((m) => `${m.manufacturer} ${m.model} (${m.style}, ${m.displacementCc}cc, ${m.weightKg}kg)`)
     .join('; ');
-
   const bestNextGuess = candidates[Math.floor(candidates.length / 2)];
 
   return [
     `🏍️ Fala, piloto! Analisei sua pergunta ("${userMessage}") cruzando com os seus ${guesses.length} palpite(s) na telemetria do RANDANDAN:`,
-    `• Restam ${candidates.length} motocicleta(s) compatíveis no catálogo, distribuídas entre as marcas [${brands.join(', ')}] e estilos [${styles.join(', ')}], na faixa de ${minCc}cc a ${maxCc}cc.`,
-    `• Alguns modelos que se encaixam perfeitamente: ${sampleModels}.`,
-    `💡 Dica do Chefe de Box: um excelente próximo palpite para dividir a busca ao meio é a **${bestNextGuess.manufacturer} ${bestNextGuess.model}** (${bestNextGuess.displacementCc}cc, ${bestNextGuess.weightKg}kg, ${bestNextGuess.style})!`,
+    `• Restam ${candidates.length} motocicleta(s) compatíveis no catálogo, entre as marcas [${brands.join(', ')}] e estilos [${styles.join(', ')}], na faixa de ${minCc}cc a ${maxCc}cc.`,
+    `• Modelos compatíveis: ${sampleModels}.`,
+    `💡 Dica do Chefe de Box: um excelente próximo palpite para dividir as opções ao meio é a ${bestNextGuess.manufacturer} ${bestNextGuess.model} (${bestNextGuess.displacementCc}cc, ${bestNextGuess.weightKg}kg, ${bestNextGuess.style})!`,
   ].join('\n');
 }
 
 const SYSTEM_INSTRUCTION = `
 Você é o "Chefe de Box RANDANDAN", o mecânico e engenheiro de pista especialista em motocicletas do jogo RANDANDAN.
 Sua missão é ajudar o jogador a deduzir a moto secreta dando dicas inteligentes, analisando os chutes anteriores e tirando dúvidas sobre fichas técnicas.
-
-REGRAS CRÍTICAS:
-1. Você NÃO SABE qual é a moto secreta do dia ou da rodada. Nunca finja que sabe a resposta exata de antemão.
-2. Lembre-se da regra das setas do RANDANDAN nas colunas de Cilindrada (cc) e Peso (kg):
-   - "higher" (▲ MAIOR QUE O SECRETO): significa que o valor da moto CHUTADA é MAIOR do que o da moto secreta (logo, a moto secreta tem valor MENOR que o chute).
-   - "lower" (▼ MENOR QUE O SECRETO): significa que o valor da moto CHUTADA é MENOR do que o da moto secreta (logo, a moto secreta tem valor MAIOR que o chute).
-3. Use a lista de "Motos candidatas restantes no catálogo" fornecida no contexto para orientar o jogador.
-4. Responda sempre em português brasileiro (pt-BR), de forma concisa (máximo de 2 a 3 parágrafos curtos), animada e com vocabulário motociclístico.
+Você NÃO SABE qual é a moto secreta do dia ou da rodada.
+Responda sempre em português brasileiro (pt-BR), de forma concisa (máximo de 2 parágrafos curtos), animada e com vocabulário motociclístico.
 `.trim();
 
-/**
- * Consulta a API do Google Gemini usando fetch nativo do Node.js 20/22,
- * tentando múltiplos modelos gratuitos caso o principal esteja sobrecarregado (503/429).
- */
+function withTimeout(promise, ms, label) {
+  return Promise.race([
+    promise,
+    new Promise((_, reject) =>
+      setTimeout(() => reject(new Error(`Timeout de ${ms}ms atingido em ${label}`)), ms),
+    ),
+  ]);
+}
+
 async function callGeminiWithFallback(apiKey, contents) {
   let lastErr = null;
 
   for (const model of GEMINI_MODELS) {
     try {
       const url = `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent?key=${encodeURIComponent(apiKey)}`;
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          systemInstruction: {
-            parts: [{ text: SYSTEM_INSTRUCTION }],
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.5,
-            maxOutputTokens: 600,
-          },
+      const generationConfig = {
+        temperature: 0.5,
+        maxOutputTokens: 500,
+      };
+      // Desativa o modo "thinking" nos modelos 2.5 para responder em ~1.5s em vez de >15s
+      if (model.startsWith('gemini-2.5')) {
+        generationConfig.thinkingConfig = { thinkingBudget: 0 };
+      }
+
+      const res = await withTimeout(
+        fetch(url, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            systemInstruction: { parts: [{ text: SYSTEM_INSTRUCTION }] },
+            contents,
+            generationConfig,
+          }),
         }),
-      });
+        4500,
+        `Gemini ${model}`,
+      );
 
       const data = await res.json();
-
       if (!res.ok) {
-        const msg = data?.error?.message || `HTTP ${res.status}`;
-        console.warn(`[RANDANDAN Lambda] Modelo ${model} retornou status ${res.status}: ${msg}`);
-        lastErr = new Error(msg);
+        lastErr = new Error(data?.error?.message || `HTTP ${res.status}`);
+        console.warn(`[RANDANDAN Lambda] ${model} falhou:`, lastErr.message);
         continue;
       }
 
       const text = data?.candidates?.[0]?.content?.parts
+        ?.filter((p) => !p?.thought)
         ?.map((p) => p?.text || '')
         .join('')
         .trim();
 
       if (text) {
-        console.log(`[RANDANDAN Lambda] Resposta gerada com sucesso pelo modelo ${model}`);
-        return text;
+        console.log(`[RANDANDAN Lambda] Respondido por ${model}`);
+        return { text, source: model };
       }
     } catch (err) {
       lastErr = err;
-      console.warn(`[RANDANDAN Lambda] Erro ao chamar modelo ${model}:`, err?.message || err);
+      console.warn(`[RANDANDAN Lambda] Timeout/erro em ${model}:`, err?.message || err);
     }
   }
 
-  throw lastErr || new Error('Todos os modelos gratuitos do Gemini estão temporariamente indisponíveis.');
+  throw lastErr || new Error('Modelos indisponíveis');
 }
 
-/**
- * Envia a resposta de volta ao cliente conectado via WebSocket usando a
- * API de Gerenciamento de Conexões do Amazon API Gateway (PostToConnectionCommand).
- */
 async function postToWebSocketConnection(event, payload) {
   const connectionId = event?.requestContext?.connectionId;
-  if (!connectionId) {
-    return false;
-  }
+  if (!connectionId) return false;
 
-  const domainName = event?.requestContext?.domainName;
   const stage = event?.requestContext?.stage;
   const apiId = event?.requestContext?.apiId;
+  const domainName = event?.requestContext?.domainName;
   const region = process.env.AWS_REGION || 'us-east-1';
 
-  const candidateEndpoints = [];
-  if (process.env.WEBSOCKET_CALLBACK_URL) {
-    candidateEndpoints.push(process.env.WEBSOCKET_CALLBACK_URL);
-  }
-  if (apiId && stage) {
-    candidateEndpoints.push(`https://${apiId}.execute-api.${region}.amazonaws.com/${stage}`);
-  }
-  if (domainName) {
-    if (domainName.includes('execute-api') && stage) {
-      candidateEndpoints.push(`https://${domainName}/${stage}`);
-    } else {
-      candidateEndpoints.push(`https://${domainName}`);
-      if (stage && stage !== '$default') {
-        candidateEndpoints.push(`https://${domainName}/${stage}`);
-      }
-    }
-  }
+  const endpoint =
+    apiId && stage
+      ? `https://${apiId}.execute-api.${region}.amazonaws.com/${stage}`
+      : `https://${domainName}/${stage}`;
 
   const dataBuffer = Buffer.from(JSON.stringify(payload), 'utf-8');
 
-  for (const endpoint of candidateEndpoints) {
-    try {
-      const client = new ApiGatewayManagementApiClient({
-        region,
-        endpoint,
-      });
-
-      await client.send(
-        new PostToConnectionCommand({
-          ConnectionId: connectionId,
-          Data: dataBuffer,
-        }),
-      );
-
-      console.log(
-        `[RANDANDAN Lambda] Mensagem enviada com sucesso via API Gateway Management API (${endpoint}) para connectionId=${connectionId}:`,
-        JSON.stringify(payload),
-      );
-      return true;
-    } catch (err) {
-      console.warn(`[RANDANDAN Lambda] Falha ao tentar endpoint ${endpoint}:`, err?.message || err);
-    }
+  try {
+    const client = new ApiGatewayManagementApiClient({ region, endpoint });
+    await withTimeout(
+      client.send(new PostToConnectionCommand({ ConnectionId: connectionId, Data: dataBuffer })),
+      3000,
+      `PostToConnection (${endpoint})`,
+    );
+    console.log(`[RANDANDAN Lambda] Enviado via ${endpoint} para connectionId=${connectionId}`);
+    return true;
+  } catch (err) {
+    console.warn(`[RANDANDAN Lambda] PostToConnection (${endpoint}) falhou:`, err?.message || err);
+    return false;
   }
-
-  return false;
 }
 
 export const handler = async (event) => {
   console.log('[RANDANDAN Lambda] Evento recebido:', JSON.stringify(event));
 
-  // 1. Caso esta mesma Lambda seja usada como Lambda Authorizer no $connect do API Gateway WebSocket
-  if (event?.methodArn && event?.type === 'REQUEST') {
-    return {
-      principalId: 'cognito-authenticated-pilot',
-      policyDocument: {
-        Version: '2012-10-17',
-        Statement: [
-          {
-            Action: 'execute-api:Invoke',
-            Effect: 'Allow',
-            Resource: event.methodArn,
-          },
-        ],
-      },
-    };
-  }
-
-  // 2. Rotas de ciclo de vida do WebSocket ($connect e $disconnect)
   const routeKey = event?.requestContext?.routeKey;
   const connectionId = event?.requestContext?.connectionId;
 
-  if (routeKey === '$connect') {
-    console.log(`[RANDANDAN Lambda] Nova conexão WebSocket estabelecida: connectionId=${connectionId}`);
-    return { statusCode: 200, body: 'Conectado ao WebSocket RANDANDAN.' };
+  if (routeKey === '$connect' || routeKey === '$disconnect') {
+    return { statusCode: 200, body: 'OK' };
   }
 
-  if (routeKey === '$disconnect') {
-    console.log(`[RANDANDAN Lambda] Conexão WebSocket encerrada: connectionId=${connectionId}`);
-    return { statusCode: 200, body: 'Desconectado.' };
-  }
-
-  // 3. Suporte a preflight CORS
-  const httpMethod = event?.requestContext?.http?.method || event?.httpMethod;
-  if (httpMethod === 'OPTIONS') {
-    return { statusCode: 204, headers: CORS_HEADERS, body: '' };
-  }
-
-  // Parse seguro do body
   let rawBody = {};
   if (typeof event?.body === 'string') {
-    try {
-      rawBody = JSON.parse(event.body);
-    } catch {
-      rawBody = { message: event.body };
-    }
+    try { rawBody = JSON.parse(event.body); } catch { rawBody = { message: event.body }; }
   } else if (event?.body && typeof event.body === 'object') {
     rawBody = event.body;
-  } else if (event && typeof event === 'object') {
-    rawBody = event;
   }
 
-  const userMessage = String(rawBody.message || rawBody.prompt || rawBody.question || 'Me dê uma dica sobre a moto secreta!').trim();
+  const userMessage = String(rawBody.message || rawBody.prompt || 'Me dê uma dica sobre a moto secreta!').trim();
   const guesses = Array.isArray(rawBody.guesses) ? rawBody.guesses : [];
   const hints = rawBody.hints || {};
   const history = Array.isArray(rawBody.history) ? rawBody.history : [];
 
-  console.log(
-    `[RANDANDAN Lambda] Processando mensagem na rota ${routeKey || 'HTTP'} (connectionId=${connectionId || 'N/A'}): "${userMessage}"`,
-  );
-
   const candidates = filterCandidateMotorcycles(guesses, hints);
-
   const gameContextText = [
-    `ESTADO ATUAL DA PARTIDA DO JOGADOR (tentativas feitas: ${guesses.length}/6):`,
-    guesses.length > 0
-      ? guesses
-          .map(
-            (g, idx) =>
-              `Tentativa #${idx + 1}: ${g.motorcycle?.manufacturer} ${g.motorcycle?.model} (${g.motorcycle?.style}, ${g.motorcycle?.displacementCc}cc, ${g.motorcycle?.weightKg}kg) -> ` +
-              `Marca: ${g.manufacturerStatus}, Estilo: ${g.styleStatus}, Cilindrada: ${g.displacementStatus}, Peso: ${g.weightStatus}`,
-          )
-          .join('\n')
-      : 'Nenhuma tentativa realizada ainda.',
-    hints?.fipePrice ? `Dica FIPE revelada: ${hints.fipePrice}` : '',
-    hints?.topSpeedKmh ? `Dica Top Speed revelada: ${hints.topSpeedKmh} km/h` : '',
-    `\nMOTOS DO CATÁLOGO QUE AINDA COMBINAM COM AS PISTAS (${candidates.length} de ${MOTORCYCLES_CATALOG.length}):`,
-    candidates
-      .map(
-        (m) =>
-          `- ${m.manufacturer} ${m.model} | Estilo: ${m.style} | ${m.displacementCc} cc | ${m.weightKg} kg | FIPE: ${m.fipePrice} | Top Speed: ${m.topSpeedKmh} km/h`,
-      )
-      .join('\n'),
-  ]
-    .filter(Boolean)
-    .join('\n');
+    `Tentativas feitas: ${guesses.length}/6.`,
+    `Motos compatíveis restantes (${candidates.length}/${MOTORCYCLES_CATALOG.length}):`,
+    candidates.map((m) => `- ${m.manufacturer} ${m.model} (${m.style}, ${m.displacementCc}cc, ${m.weightKg}kg)`).join('\n'),
+  ].join('\n');
 
   const contents = [
     ...history
       .filter((item) => item && item.text && (item.role === 'user' || item.role === 'model'))
-      .map((item) => ({
-        role: item.role,
-        parts: [{ text: String(item.text) }],
-      })),
-    {
-      role: 'user',
-      parts: [
-        {
-          text: `${gameContextText}\n\nPERGUNTA DO JOGADOR: ${userMessage}`,
-        },
-      ],
-    },
+      .map((item) => ({ role: item.role, parts: [{ text: String(item.text) }] })),
+    { role: 'user', parts: [{ text: `${gameContextText}\n\nPERGUNTA DO JOGADOR: ${userMessage}` }] },
   ];
 
   let reply = '';
+  let source = 'fallback-mechanic';
   const apiKey = process.env.GEMINI_API_KEY;
 
   if (apiKey) {
     try {
-      reply = await callGeminiWithFallback(apiKey, contents);
-    } catch (geminiErr) {
-      console.warn(
-        '[RANDANDAN Lambda] Cota gratuita do Gemini ocupada/indisponível, usando telemetria inteligente de fallback:',
-        geminiErr?.message || geminiErr,
-      );
+      const res = await withTimeout(callGeminiWithFallback(apiKey, contents), 9000, 'GeminiTotal');
+      reply = res.text;
+      source = res.source;
+    } catch (err) {
+      console.warn('[RANDANDAN Lambda] Fallback ativado:', err?.message || err);
       reply = buildFallbackMechanicReply(userMessage, candidates, guesses);
     }
   } else {
@@ -386,6 +267,7 @@ export const handler = async (event) => {
     type: 'chat_reply',
     question: userMessage,
     reply,
+    source,
     candidatesRemaining: candidates.length,
     zeroScore: true,
     scoreMultiplier: 0,
@@ -398,10 +280,5 @@ export const handler = async (event) => {
     await postToWebSocketConnection(event, responsePayload);
   }
 
-  // Sempre retorna 200 para que o API Gateway WebSocket não dispare "Internal server error"
-  return {
-    statusCode: 200,
-    headers: CORS_HEADERS,
-    body: JSON.stringify(responsePayload),
-  };
+  return { statusCode: 200, headers: CORS_HEADERS, body: JSON.stringify(responsePayload) };
 };
