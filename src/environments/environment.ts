@@ -16,5 +16,5 @@ export const environment = {
     ]
   },
   "websocketUrl": "wss://api.pedrohercules.dengoso.web.ufersa.dev.br",
-  "profileApiUrl": "https://api.pedrohercules.dengoso.web.ufersa.dev.br/profile"
+  "profileApiUrl": "https://gaff3pwpe0.execute-api.us-east-1.amazonaws.com/profile"
 };

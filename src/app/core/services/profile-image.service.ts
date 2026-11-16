@@ -10,7 +10,7 @@ export interface ProfileImageMetadata {
   updatedAt?: string | null;
 }
 
-const DEFAULT_PROFILE_API_URL = 'https://api.pedrohercules.dengoso.web.ufersa.dev.br/profile';
+const DEFAULT_PROFILE_API_URL = 'https://gaff3pwpe0.execute-api.us-east-1.amazonaws.com/profile';
 const ALLOWED_MIME_TYPES = new Set([
   'image/png',
   'image/jpeg',
@@ -189,7 +189,6 @@ export class ProfileImageService {
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${token}`,
-          'X-File-Name': encodeURIComponent(file.name),
         },
         body: JSON.stringify({
           imageBase64: base64DataUrl,

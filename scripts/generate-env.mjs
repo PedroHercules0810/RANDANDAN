@@ -97,7 +97,7 @@ const environment = {
     'wss://api.pedrohercules.dengoso.web.ufersa.dev.br',
   profileApiUrl:
     readValue('NG_APP_PROFILE_API_URL', fileVariables) ||
-    'https://api.pedrohercules.dengoso.web.ufersa.dev.br/profile',
+    'https://gaff3pwpe0.execute-api.us-east-1.amazonaws.com/profile',
 };
 
 const output = `// GERADO AUTOMATICAMENTE por scripts/generate-env.mjs — não edite manualmente.
