@@ -1,25 +1,131 @@
 <section class="auth-section">
-    <div class="container auth-container">
-        <h1>Meu Perfil</h1>
+    <div class="container auth-container profile-container">
+        <h1>Meu Perfil de Piloto</h1>
 
         @if (authState().user; as user) {
-            <p><strong>Nome:</strong> {{ user.displayName }}</p>
-            <p><strong>E-mail:</strong> {{ user.email }}</p>
-            @if (user.provider === 'google') {
-                <p><strong>Autenticação:</strong> Google</p>
-            }
-            @if (!user.emailVerified) {
-                <p class="auth-error">Seu e-mail ainda não foi verificado.</p>
-            }
-            <p>
-                <strong>Equipe:</strong>
-                @if (currentTeam; as team) {
-                    {{ team.name }}
+            <!-- Painel de Foto de Perfil (AWS S3 Bucket "profile" + API Gateway /profile + Cognito JWT) -->
+            <div class="profile-avatar-card">
+                <div class="avatar-preview-box">
+                    @if (localPreviewUrl(); as preview) {
+                        <img [src]="preview" alt="Pré-visualização da nova foto de perfil" class="avatar-image preview" />
+                        <span class="avatar-badge preview-badge">PRÉVIA LOCAL</span>
+                    } @else if (profileImageService.imageUrl(); as s3Image) {
+                        <img [src]="s3Image" alt="Foto de perfil do piloto carregada do S3" class="avatar-image" />
+                        <span class="avatar-badge s3-badge">S3 • BUCKET PROFILE</span>
+                    } @else {
+                        <div class="avatar-placeholder">
+                            <span>{{ user.displayName.slice(0, 2).toUpperCase() }}</span>
+                        </div>
+                    }
+                </div>
+
+                <div class="avatar-controls">
+                    <span class="avatar-tag">AWS S3 BUCKET: PROFILE • ROTA PROTEGIDA POR JWT</span>
+                    <h2>Foto de Perfil</h2>
+                    <p class="avatar-desc">
+                        Envie exclusivamente um arquivo de imagem (<code>.PNG</code>, <code>.JPG</code>, <code>.WEBP</code> ou <code>.GIF</code>) via <code>POST /profile</code> com <code>fetch</code>, ou carregue sua imagem atual com <code>GET /profile</code>.
+                    </p>
+
+                    <div class="endpoint-config-row">
+                        <label for="profile-endpoint-input">Endpoint da rota <code>/profile</code> no API Gateway:</label>
+                        <input
+                            id="profile-endpoint-input"
+                            type="url"
+                            class="endpoint-input"
+                            [ngModel]="customEndpoint()"
+                            (ngModelChange)="customEndpoint.set($event)"
+                            placeholder="https://api.pedrohercules.dengoso.web.ufersa.dev.br/profile"
+                        />
+                    </div>
+
+                    <div class="file-upload-row">
+                        <label class="file-select-label" for="profile-image-input">
+                            📁 Escolher Arquivo de Imagem
+                        </label>
+                        <input
+                            id="profile-image-input"
+                            type="file"
+                            accept="image/png,image/jpeg,image/webp,image/gif"
+                            (change)="onFileSelected($event)"
+                        />
+                        @if (selectedFile(); as file) {
+                            <span class="selected-file-name">{{ file.name }} ({{ (file.size / 1024).toFixed(1) }} KB)</span>
+                        }
+                    </div>
+
+                    <div class="avatar-actions-row">
+                        <button
+                            type="button"
+                            class="btn btn-primary"
+                            [disabled]="!selectedFile() || profileImageService.isUploading()"
+                            (click)="uploadSelectedImage()"
+                        >
+                            @if (profileImageService.isUploading()) {
+                                Enviando (POST /profile)...
+                            } @else {
+                                ⬆️ Enviar Imagem (POST /profile)
+                            }
+                        </button>
+
+                        <button
+                            type="button"
+                            class="btn btn-secondary"
+                            [disabled]="profileImageService.isLoading()"
+                            (click)="reloadImageFromS3()"
+                        >
+                            @if (profileImageService.isLoading()) {
+                                Lendo S3 (GET /profile)...
+                            } @else {
+                                🔄 Ler Imagem do S3 (GET /profile)
+                            }
+                        </button>
+                    </div>
+
+                    @if (profileImageService.successMessage(); as okMsg) {
+                        <p class="profile-feedback success">✓ {{ okMsg }}</p>
+                    }
+
+                    @if (profileImageService.errorMessage(); as errMsg) {
+                        <p class="profile-feedback error">⚠️ {{ errMsg }}</p>
+                    }
+
+                    @if (profileImageService.metadata(); as meta) {
+                        <div class="s3-meta-box">
+                            @if (meta.bucket) {
+                                <span><strong>Bucket:</strong> {{ meta.bucket }}</span>
+                            }
+                            @if (meta.key) {
+                                <span><strong>Key:</strong> {{ meta.key }}</span>
+                            }
+                            @if (meta.contentType) {
+                                <span><strong>Tipo:</strong> {{ meta.contentType }}</span>
+                            }
+                        </div>
+                    }
+                </div>
+            </div>
+
+            <div class="profile-info-card">
+                <p><strong>Nome:</strong> {{ user.displayName }}</p>
+                <p><strong>E-mail:</strong> {{ user.email }}</p>
+                @if (user.provider === 'google') {
+                    <p><strong>Autenticação:</strong> Google (Cognito OAuth)</p>
                 } @else {
-                    Nenhuma equipe escolhida —
-                    <a routerLink="/equipe">escolher agora</a>
+                    <p><strong>Autenticação:</strong> Amazon Cognito JWT</p>
                 }
-            </p>
+                @if (!user.emailVerified) {
+                    <p class="auth-error">Seu e-mail ainda não foi verificado.</p>
+                }
+                <p>
+                    <strong>Equipe:</strong>
+                    @if (currentTeam; as team) {
+                        {{ team.name }}
+                    } @else {
+                        Nenhuma equipe escolhida —
+                        <a routerLink="/equipe">escolher agora</a>
+                    }
+                </p>
+            </div>
 
             <h2>Histórico de pontuação</h2>
             @if (scoreHistory.length) {

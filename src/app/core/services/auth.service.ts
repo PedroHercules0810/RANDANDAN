@@ -209,6 +209,21 @@ export class AuthService {
   }
 
   /**
+   * Obtém o Token JWT (ID Token / Access Token) do Amazon Cognito para rotas HTTP/REST
+   * protegidas por Authorizer no API Gateway (como POST /profile e GET /profile).
+   */
+  async getJwtToken(): Promise<string | null> {
+    try {
+      const session = await fetchAuthSession();
+      const idToken = session.tokens?.idToken?.toString();
+      const accessToken = session.tokens?.accessToken?.toString();
+      return idToken ?? accessToken ?? null;
+    } catch {
+      return null;
+    }
+  }
+
+  /**
    * Escuta eventos de autenticação do Amplify Hub para reagir à conclusão
    * (ou falha) assíncrona do fluxo OAuth (`signInWithRedirect`).
    */

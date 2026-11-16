@@ -95,6 +95,9 @@ const environment = {
   websocketUrl:
     readValue('NG_APP_WEBSOCKET_URL', fileVariables) ||
     'wss://api.pedrohercules.dengoso.web.ufersa.dev.br',
+  profileApiUrl:
+    readValue('NG_APP_PROFILE_API_URL', fileVariables) ||
+    'https://api.pedrohercules.dengoso.web.ufersa.dev.br/profile',
 };
 
 const output = `// GERADO AUTOMATICAMENTE por scripts/generate-env.mjs — não edite manualmente.
