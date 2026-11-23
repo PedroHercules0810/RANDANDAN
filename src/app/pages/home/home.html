@@ -1,95 +1,75 @@
-<section class="hero">
+<!-- Banner Hero Compacto (Jogo visível imediatamente acima da dobra) -->
+<section class="hero hero-compact">
     <div class="hero-background">
         <div class="hero-overlay"></div>
     </div>
-    <div class="hero-content container">
-        <h1>RANDANDAN</h1>
-        <p class="hero-subtitle">O jogo definitivo de adivinhação de motos brasileiras</p>
-        <div class="hero-actions">
-            <button type="button" class="btn btn-primary btn-lg" (click)="scrollToArena('daily')">Jogar Agora</button>
-            <a routerLink="/como-jogar" class="btn btn-secondary btn-lg">Como Jogar</a>
-            <a routerLink="/funcionalidades" class="btn btn-secondary btn-lg">Funcionalidades</a>
+    <div class="container hero-compact-inner">
+        <div class="hero-compact-copy">
+            <span class="hero-kicker">DESAFIO DIÁRIO DE MOTOCICLETAS BRASILEIRAS</span>
+            <h1>RANDANDAN</h1>
+            <p class="hero-subtitle">Descubra a moto secreta em até {{ maxAttempts }} palpites comparando marca, modelo, cilindrada, peso e estilo.</p>
+        </div>
+
+        <div class="pilot-status-box">
+            @if (authState().status === 'authenticated' && authState().user; as user) {
+                <div class="pilot-badge authenticated">
+                    <span class="pilot-label">● PILOTO CONECTADO</span>
+                    <strong>{{ user.displayName }}</strong>
+                    <span class="pilot-team">
+                        @if (currentTeam; as team) {
+                            🏁 Equipe: {{ team.name }}
+                        } @else {
+                            <a routerLink="/equipe">Escolher Equipe →</a>
+                        }
+                    </span>
+                </div>
+            } @else {
+                <div class="pilot-badge guest">
+                    <span class="pilot-label">MODO VISITANTE</span>
+                    <p>Jogue livremente ou <a routerLink="/login">entre na conta</a> para pontuar no ranking e usar o chat IA.</p>
+                </div>
+            }
         </div>
     </div>
 </section>
 
 <section id="arena-jogo" class="game-arena">
     <div class="container">
-        <div class="arena-header">
-            <div>
-                <h2 class="section-title">Arena de Adivinhação</h2>
-                <p class="arena-subtitle">Descubra a motocicleta secreta em até {{ maxAttempts }} tentativas analisando os 5 atributos técnicos.</p>
+        <!-- Barra Superior Unificada: Abas de Modo + Telemetria Compacta -->
+        <div class="arena-topbar">
+            <div class="features-tabs arena-tabs">
+                <button
+                    type="button"
+                    class="tab-btn"
+                    [class.active]="activeArenaTab() === 'daily'"
+                    (click)="selectArenaTab('daily')"
+                >
+                    🎯 Desafio Diário
+                </button>
+                <button
+                    type="button"
+                    class="tab-btn"
+                    [class.active]="activeArenaTab() === 'infinite'"
+                    (click)="selectArenaTab('infinite')"
+                >
+                    ♾️ Modo Infinito
+                </button>
+                <button
+                    type="button"
+                    class="tab-btn"
+                    [class.active]="activeArenaTab() === 'rankings'"
+                    (click)="selectArenaTab('rankings')"
+                >
+                    🏆 Rankings
+                </button>
             </div>
 
-            <div class="pilot-status-box">
-                @if (authState().status === 'authenticated' && authState().user; as user) {
-                    <div class="pilot-badge authenticated">
-                        <span class="pilot-label">PILOTO AUTENTICADO</span>
-                        <strong>{{ user.displayName }}</strong>
-                        <span class="pilot-team">
-                            @if (currentTeam; as team) {
-                                Equipe: {{ team.name }}
-                            } @else {
-                                <a routerLink="/equipe">Escolher Equipe →</a>
-                            }
-                        </span>
-                    </div>
-                } @else {
-                    <div class="pilot-badge guest">
-                        <span class="pilot-label">MODO VISITANTE</span>
-                        <p>Jogue livremente! <a routerLink="/login">Entre na sua conta</a> para pontuar no ranking oficial.</p>
-                    </div>
-                }
-            </div>
-        </div>
-
-        <div class="features-tabs arena-tabs">
-            <button
-                type="button"
-                class="tab-btn"
-                [class.active]="activeArenaTab() === 'daily'"
-                (click)="selectArenaTab('daily')"
-            >
-                Modo Diário
-            </button>
-            <button
-                type="button"
-                class="tab-btn"
-                [class.active]="activeArenaTab() === 'infinite'"
-                (click)="selectArenaTab('infinite')"
-            >
-                Modo Infinito
-            </button>
-            <button
-                type="button"
-                class="tab-btn"
-                [class.active]="activeArenaTab() === 'rankings'"
-                (click)="selectArenaTab('rankings')"
-            >
-                Rankings
-            </button>
-        </div>
-
-        @if (activeArenaTab() !== 'rankings') {
-            @let round = activeRound();
-
-            <!-- HUD / Telemetria -->
-            <div class="telemetry-bar">
-                <div class="telemetry-item">
-                    <span class="telemetry-label">MODO ATUAL</span>
-                    <strong class="telemetry-value">
-                        @if (activeMode() === 'daily') {
-                            DESAFIO DIÁRIO • {{ todayDateFormatted() }}
-                        } @else {
-                            MODO INFINITO • PRÁTICA LIVRE
-                        }
-                    </strong>
-                </div>
-
-                <div class="telemetry-item">
-                    <span class="telemetry-label">TENTATIVAS</span>
-                    <div class="telemetry-attempts">
-                        <strong class="telemetry-value mono">{{ round.guesses.length }} / {{ maxAttempts }}</strong>
+            @if (activeArenaTab() !== 'rankings') {
+                @let round = activeRound();
+                <div class="telemetry-strip">
+                    <div class="telemetry-chip">
+                        <span class="chip-label">TENTATIVAS</span>
+                        <strong class="mono">{{ round.guesses.length }}/{{ maxAttempts }}</strong>
                         <div class="attempt-dots" aria-hidden="true">
                             @for (guess of round.guesses; track guess.motorcycle.id) {
                                 <span class="attempt-dot" [class.won]="guess.isCorrect" [class.used]="!guess.isCorrect"></span>
@@ -99,433 +79,465 @@
                             }
                         </div>
                     </div>
-                </div>
 
-                <div class="telemetry-item">
-                    <span class="telemetry-label">TEMPO DE PROVA</span>
-                    <strong class="telemetry-value mono">{{ elapsedFormatted() }}</strong>
-                </div>
+                    <div class="telemetry-chip">
+                        <span class="chip-label">TEMPO</span>
+                        <strong class="mono">{{ elapsedFormatted() }}</strong>
+                    </div>
 
-                <div class="telemetry-item">
-                    @if (activeMode() === 'daily') {
-                        <span class="telemetry-label">PRÓXIMA MOTO (00:00 BRT)</span>
-                        <strong class="telemetry-value mono accent">{{ countdownFormatted() }}</strong>
-                    } @else {
-                        <span class="telemetry-label">SEQUÊNCIA DE VITÓRIAS</span>
-                        <strong class="telemetry-value mono accent">{{ infiniteStreak() }} <small>(RECORDE: {{ bestInfiniteStreak() }})</small></strong>
-                    }
-                </div>
-            </div>
-
-            <!-- Painel de Dicas Estratégicas -->
-            <div class="arena-hints-bar">
-                <div class="arena-hint-card" [class.revealed]="round.fipeHintUsed || round.status !== 'playing'">
-                    <div class="arena-hint-info">
-                        <span class="arena-hint-tag">DICA 1 • TABELA FIPE</span>
-                        @if (round.fipeHintUsed || round.status !== 'playing') {
-                            <strong class="arena-hint-value">{{ round.target.fipePrice }}</strong>
+                    <div class="telemetry-chip accent-chip">
+                        @if (activeMode() === 'daily') {
+                            <span class="chip-label">PRÓXIMA MOTO</span>
+                            <strong class="mono">{{ countdownFormatted() }}</strong>
                         } @else {
-                            <p class="arena-hint-desc">Revela a faixa de preço FIPE da moto secreta (-200 pts no bônus de dicas)</p>
-                        }
-                    </div>
-                    @if (!round.fipeHintUsed && round.status === 'playing') {
-                        <button type="button" class="hint-action-btn" (click)="revealFipeHint()">Usar Dica FIPE</button>
-                    } @else {
-                        <span class="hint-status-pill">{{ round.fipeHintUsed ? 'DICA USADA' : 'REVELADA' }}</span>
-                    }
-                </div>
-
-                <div class="arena-hint-card" [class.revealed]="round.topSpeedHintUsed || round.status !== 'playing'">
-                    <div class="arena-hint-info">
-                        <span class="arena-hint-tag">DICA 2 • VELOCIDADE MÁXIMA</span>
-                        @if (round.topSpeedHintUsed || round.status !== 'playing') {
-                            <strong class="arena-hint-value">{{ round.target.topSpeedKmh }} km/h</strong>
-                        } @else {
-                            <p class="arena-hint-desc">Revela a velocidade máxima declarada pela fabricante (-200 pts no bônus)</p>
-                        }
-                    </div>
-                    @if (!round.topSpeedHintUsed && round.status === 'playing') {
-                        <button type="button" class="hint-action-btn" (click)="revealTopSpeedHint()">Usar Dica Velocidade</button>
-                    } @else {
-                        <span class="hint-status-pill">{{ round.topSpeedHintUsed ? 'DICA USADA' : 'REVELADA' }}</span>
-                    }
-                </div>
-
-                <div class="arena-hint-summary">
-                    <span class="arena-hint-tag">IMPACTO DE DICAS</span>
-                    @if (round.aiChatUsed) {
-                        <strong class="mono negative">0 PTS (IA)</strong>
-                        <small>Chat Gemini usado (zera pontuação)</small>
-                    } @else {
-                        <strong class="mono" [class.positive]="currentHintBonusPreview() > 0" [class.negative]="currentHintBonusPreview() < 0">
-                            {{ currentHintBonusPreview() >= 0 ? '+' : '' }}{{ currentHintBonusPreview() }} PTS
-                        </strong>
-                        <small>{{ hintsUsedCount() }}/2 dicas utilizadas</small>
-                    }
-                </div>
-            </div>
-
-            <!-- Chat de Dicas via WebSocket Autenticado (Amazon Cognito + API Gateway + AWS Lambda + Google Gemini) -->
-            <div class="gemini-chat-panel">
-                <div class="gemini-chat-header">
-                    <div class="gemini-chat-title-group">
-                        <span class="gemini-chat-badge">IA • GOOGLE GEMINI + AWS WEBSOCKET</span>
-                        <h3>Chefe de Box — Chat de Dicas (Rota $default)</h3>
-                        <p>Peça dicas sobre o catálogo e seus palpites. A IA não sabe qual é a moto do dia, mas <strong>usar o chat zera sua pontuação na rodada</strong>.</p>
-                    </div>
-
-                    <div class="gemini-ws-meta">
-                        <div
-                            class="ws-status-pill"
-                            [class.connected]="geminiChat.connectionStatus() === 'connected'"
-                            [class.connecting]="geminiChat.connectionStatus() === 'connecting'"
-                            [class.error]="geminiChat.connectionStatus() === 'error'"
-                        >
-                            <span class="ws-dot"></span>
-                            @if (geminiChat.connectionStatus() === 'connected') {
-                                WS CONECTADO • {{ geminiChat.websocketEndpoint() }}
-                            } @else if (geminiChat.connectionStatus() === 'connecting') {
-                                CONECTANDO WEBSOCKET...
-                            } @else if (geminiChat.connectionStatus() === 'error') {
-                                ERRO NA CONEXÃO WS
-                            } @else {
-                                WS DESCONECTADO
-                            }
-                        </div>
-
-                        @if (authState().status === 'authenticated') {
-                            <button
-                                type="button"
-                                class="hint-action-btn ws-reconnect-btn"
-                                (click)="reconnectChatWebSocket()"
-                            >
-                                ↻ Reconectar WebSocket
-                            </button>
+                            <span class="chip-label">SEQUÊNCIA</span>
+                            <strong class="mono">{{ infiniteStreak() }} 🔥 <small>(Rec: {{ bestInfiniteStreak() }})</small></strong>
                         }
                     </div>
                 </div>
+            }
+        </div>
 
-                @if (authState().status !== 'authenticated') {
-                    <div class="gemini-chat-auth-lock">
-                        <p>🔒 <strong>Autenticação Cognito necessária:</strong> Para gerar o token de acesso e estabelecer a conexão WebSocket autenticada com <code>{{ geminiChat.websocketEndpoint() }}</code>, entre na sua conta.</p>
-                        <a routerLink="/login" class="btn btn-primary">Entrar com Cognito / Google</a>
-                    </div>
-                } @else {
-                    <div class="gemini-chat-messages" role="log" aria-live="polite">
-                        @for (msg of geminiChat.messages(); track msg.id) {
-                            <div
-                                class="gemini-msg"
-                                [class.user]="msg.role === 'user'"
-                                [class.model]="msg.role === 'model'"
-                                [class.system]="msg.role === 'system'"
-                            >
-                                <div class="gemini-msg-meta">
-                                    <strong>
-                                        @if (msg.role === 'user') {
-                                            Você (Piloto)
-                                        } @else if (msg.role === 'model') {
-                                            🤖 Chefe de Box (Google Gemini)
-                                        } @else {
-                                            ⚡ Telemetria RANDANDAN
-                                        }
-                                    </strong>
-                                    <span class="mono">{{ msg.timestamp }}</span>
-                                </div>
-                                <p class="gemini-msg-text">{{ msg.text }}</p>
-                                @if (msg.candidatesRemaining !== undefined) {
-                                    <span class="gemini-candidates-pill">
-                                        {{ msg.candidatesRemaining }} moto(s) do catálogo compatíveis com suas pistas
-                                    </span>
-                                }
-                            </div>
-                        }
+        @if (activeArenaTab() !== 'rankings') {
+            @let round = activeRound();
 
-                        @if (geminiChat.isSending()) {
-                            <div class="gemini-msg model loading">
-                                <div class="gemini-msg-meta">
-                                    <strong>🤖 Chefe de Box (Google Gemini)</strong>
-                                    <span class="mono">processando na AWS Lambda ($default)...</span>
-                                </div>
-                                <p class="gemini-msg-text">Consultando catálogo e telemetria via API Gateway WebSocket...</p>
-                            </div>
-                        }
-                    </div>
-
-                    @if (geminiChat.errorMessage(); as wsErr) {
-                        <p class="guess-error">{{ wsErr }}</p>
-                    }
-
-                    <div class="gemini-quick-questions">
-                        <span class="quick-label">Sugestões rápidas:</span>
-                        <button
-                            type="button"
-                            class="quick-chip"
-                            [disabled]="geminiChat.isSending()"
-                            (click)="sendQuickQuestion('Me dê uma dica para descobrir a moto secreta com base nos meus chutes até agora!')"
-                        >
-                            💡 Pedir dica com base nos meus chutes
-                        </button>
-                        <button
-                            type="button"
-                            class="quick-chip"
-                            [disabled]="geminiChat.isSending()"
-                            (click)="sendQuickQuestion('Quais motos do catálogo ainda são compatíveis com as pistas atuais?')"
-                        >
-                            🏍️ Quais motos ainda restam?
-                        </button>
-                    </div>
-
-                    <form class="gemini-chat-form" (ngSubmit)="sendChatQuestion()">
-                        <input
-                            type="text"
-                            name="chatQuestionInput"
-                            class="guess-input gemini-chat-input"
-                            placeholder="Envie uma pergunta pelo WebSocket para o Gemini (ex: Qual moto Naked tem mais de 600cc?)..."
-                            autocomplete="off"
-                            [ngModel]="chatQuestion()"
-                            (ngModelChange)="chatQuestion.set($event)"
-                            [disabled]="geminiChat.isSending()"
-                        />
-                        <button
-                            type="submit"
-                            class="btn btn-primary gemini-send-btn"
-                            [disabled]="geminiChat.isSending() || !chatQuestion().trim()"
-                        >
-                            {{ geminiChat.isSending() ? 'Enviando...' : 'Enviar Pergunta (Zera Pontos)' }}
-                        </button>
-                    </form>
-                }
-            </div>
-
-            <!-- Campo de Busca / Autocomplete de Palpite -->
-            @if (round.status === 'playing') {
-                <div class="guess-box">
-                    <label class="guess-label" for="moto-search-input">
-                        FAÇA SEU PALPITE ({{ round.guesses.length + 1 }}ª TENTATIVA DE {{ maxAttempts }})
-                    </label>
-                    <div class="guess-input-row">
-                        <div class="autocomplete-wrapper">
-                            <input
-                                id="moto-search-input"
-                                type="text"
-                                class="guess-input"
-                                placeholder="Digite a marca ou modelo da moto (ex: Honda CB 500F, Yamaha R3, Ninja, Naked)..."
-                                autocomplete="off"
-                                [ngModel]="searchQuery()"
-                                (ngModelChange)="onSearchInput($event)"
-                                (focus)="onSearchFocus()"
-                                (blur)="closeDropdownDelayed()"
-                                (keydown)="onSearchKeydown($event)"
-                            />
-
-                            @if (dropdownOpen()) {
-                                <div class="autocomplete-dropdown" role="listbox">
-                                    @if (filteredSuggestions().length > 0) {
-                                        @for (moto of filteredSuggestions(); track moto.id; let i = $index) {
-                                            <button
-                                                type="button"
-                                                class="autocomplete-option"
-                                                [class.highlighted]="i === highlightedIndex()"
-                                                (mousedown)="chooseMotorcycle(moto)"
-                                            >
-                                                <span class="option-brand">{{ moto.manufacturer }}</span>
-                                                <strong class="option-model">{{ moto.model }}</strong>
-                                                <span class="option-action">PALPITAR →</span>
-                                            </button>
-                                        }
+            <!-- Layout em 2 Colunas: Esquerda (Jogo & Tabuleiro) | Direita (Dicas & Chat IA Gemini) -->
+            <div class="arena-workspace-grid">
+                <!-- COLUNA PRINCIPAL: Busca, Resultado e Tabuleiro de 5 Atributos -->
+                <div class="arena-main-col">
+                    <!-- 1. Busca / Palpite (Ação Primária no Topo) -->
+                    @if (round.status === 'playing') {
+                        <div class="guess-box">
+                            <div class="guess-box-header">
+                                <label class="guess-label" for="moto-search-input">
+                                    {{ round.guesses.length + 1 }}º PALPITE DE {{ maxAttempts }}
+                                </label>
+                                <span class="guess-helper">
+                                    @if (activeMode() === 'daily') {
+                                        Desafio Diário • {{ todayDateFormatted() }}
                                     } @else {
-                                        <div class="autocomplete-empty">
-                                            Nenhuma motocicleta disponível corresponde a "{{ searchQuery() }}".
+                                        Modo Infinito • Prática Livre
+                                    }
+                                </span>
+                            </div>
+
+                            <div class="guess-input-row">
+                                <div class="autocomplete-wrapper">
+                                    <input
+                                        id="moto-search-input"
+                                        type="text"
+                                        class="guess-input"
+                                        placeholder="Digite marca ou modelo (ex: Honda CB 500F, Yamaha R3, Ninja, Naked)..."
+                                        autocomplete="off"
+                                        [ngModel]="searchQuery()"
+                                        (ngModelChange)="onSearchInput($event)"
+                                        (focus)="onSearchFocus()"
+                                        (blur)="closeDropdownDelayed()"
+                                        (keydown)="onSearchKeydown($event)"
+                                    />
+
+                                    @if (dropdownOpen()) {
+                                        <div class="autocomplete-dropdown" role="listbox">
+                                            @if (filteredSuggestions().length > 0) {
+                                                @for (moto of filteredSuggestions(); track moto.id; let i = $index) {
+                                                    <button
+                                                        type="button"
+                                                        class="autocomplete-option"
+                                                        [class.highlighted]="i === highlightedIndex()"
+                                                        (mousedown)="chooseMotorcycle(moto)"
+                                                    >
+                                                        <span class="option-brand">{{ moto.manufacturer }}</span>
+                                                        <strong class="option-model">{{ moto.model }}</strong>
+                                                        <span class="option-meta">{{ moto.style }} • {{ moto.displacementCc }}cc</span>
+                                                        <span class="option-action">Chutar →</span>
+                                                    </button>
+                                                }
+                                            } @else {
+                                                <div class="autocomplete-empty">
+                                                    Nenhuma motocicleta disponível corresponde a "{{ searchQuery() }}".
+                                                </div>
+                                            }
                                         </div>
                                     }
                                 </div>
-                            }
-                        </div>
 
-                        <button type="button" class="btn btn-primary guess-submit-btn" (click)="submitCurrentSearch()">
-                            Confirmar Palpite
-                        </button>
-                    </div>
-
-                    @if (feedbackError()) {
-                        <p class="guess-error">{{ feedbackError() }}</p>
-                    }
-                </div>
-            }
-
-            <!-- Painel de Resultado (Vitória ou Derrota) -->
-            @if (round.status !== 'playing') {
-                <div class="result-banner" [class.won]="round.status === 'won'" [class.lost]="round.status === 'lost'">
-                    <div class="result-banner-main">
-                        <span class="result-tag">
-                            @if (round.status === 'won') {
-                                🏆 VITÓRIA • MOTO SECRETA DESCOBERTA!
-                            } @else {
-                                🏁 FIM DE PROVA • LIMITE DE {{ maxAttempts }} TENTATIVAS ATINGIDO
-                            }
-                        </span>
-                        <h3>{{ round.target.manufacturer }} {{ round.target.model }}</h3>
-                        <div class="result-specs">
-                            <span><strong>Cilindrada:</strong> {{ round.target.displacementCc }} cc</span>
-                            <span><strong>Peso:</strong> {{ round.target.weightKg }} kg</span>
-                            <span><strong>Estilo:</strong> {{ round.target.style }}</span>
-                            <span><strong>FIPE:</strong> {{ round.target.fipePrice }}</span>
-                            <span><strong>Vel. Máx:</strong> {{ round.target.topSpeedKmh }} km/h</span>
-                        </div>
-
-                        @if (round.scoreBreakdown; as score) {
-                            <div class="score-breakdown-grid">
-                                <div class="score-breakdown-item">
-                                    <span>Palpites ({{ round.guesses.length }}/{{ maxAttempts }})</span>
-                                    <strong class="mono">+{{ score.guessPoints }} pts</strong>
-                                </div>
-                                <div class="score-breakdown-item">
-                                    <span>Bônus de Tempo ({{ elapsedFormatted() }})</span>
-                                    <strong class="mono">+{{ score.timeBonus }} pts</strong>
-                                </div>
-                                <div class="score-breakdown-item">
-                                    <span>Dicas ({{ hintsUsedCount() }}/2)</span>
-                                    <strong class="mono">{{ score.hintBonus >= 0 ? '+' : '' }}{{ score.hintBonus }} pts</strong>
-                                </div>
-                                <div class="score-breakdown-item total">
-                                    <span>PONTUAÇÃO FINAL</span>
-                                    <strong class="mono">{{ score.totalPoints }} pts</strong>
-                                </div>
+                                <button type="button" class="btn btn-primary guess-submit-btn" (click)="submitCurrentSearch()">
+                                    Chutar Moto
+                                </button>
                             </div>
-                        }
-                    </div>
 
-                    <div class="result-banner-actions">
-                        <div class="share-box">
-                            <span class="share-box-title">COMPARTILHE SEU RESULTADO SEM SPOILERS</span>
-                            <div class="share-actions-row">
-                                <button type="button" class="btn btn-primary" (click)="copyShareResult()">
-                                    @if (copyFeedback()) {
-                                        ✓ Resultado Copiado!
+                            @if (feedbackError()) {
+                                <p class="guess-error">{{ feedbackError() }}</p>
+                            }
+                        </div>
+                    }
+
+                    <!-- 2. Banner de Resultado (Vitória ou Derrota) -->
+                    @if (round.status !== 'playing') {
+                        <div class="result-banner" [class.won]="round.status === 'won'" [class.lost]="round.status === 'lost'">
+                            <div class="result-banner-main">
+                                <span class="result-tag">
+                                    @if (round.status === 'won') {
+                                        🏆 VITÓRIA • MOTO SECRETA DESCOBERTA!
                                     } @else {
-                                        Copiar Resultado
+                                        🏁 FIM DE PROVA • {{ maxAttempts }} TENTATIVAS ESGOTADAS
                                     }
-                                </button>
-                                <button type="button" class="btn btn-secondary" (click)="shareOnWhatsApp()">
-                                    Compartilhar no WhatsApp
-                                </button>
+                                </span>
+                                <h3>{{ round.target.manufacturer }} {{ round.target.model }}</h3>
+                                <div class="result-specs">
+                                    <span><strong>Cilindrada:</strong> {{ round.target.displacementCc }} cc</span>
+                                    <span><strong>Peso:</strong> {{ round.target.weightKg }} kg</span>
+                                    <span><strong>Estilo:</strong> {{ round.target.style }}</span>
+                                    <span><strong>FIPE:</strong> {{ round.target.fipePrice }}</span>
+                                    <span><strong>Vel. Máx:</strong> {{ round.target.topSpeedKmh }} km/h</span>
+                                </div>
+
+                                @if (round.scoreBreakdown; as score) {
+                                    <div class="score-breakdown-grid">
+                                        <div class="score-breakdown-item">
+                                            <span>Palpites ({{ round.guesses.length }}/{{ maxAttempts }})</span>
+                                            <strong class="mono">+{{ score.guessPoints }} pts</strong>
+                                        </div>
+                                        <div class="score-breakdown-item">
+                                            <span>Tempo ({{ elapsedFormatted() }})</span>
+                                            <strong class="mono">+{{ score.timeBonus }} pts</strong>
+                                        </div>
+                                        <div class="score-breakdown-item">
+                                            <span>Dicas ({{ hintsUsedCount() }}/2)</span>
+                                            <strong class="mono">{{ score.hintBonus >= 0 ? '+' : '' }}{{ score.hintBonus }} pts</strong>
+                                        </div>
+                                        <div class="score-breakdown-item total">
+                                            <span>TOTAL</span>
+                                            <strong class="mono">{{ score.totalPoints }} pts</strong>
+                                        </div>
+                                    </div>
+                                }
+                            </div>
+
+                            <div class="result-banner-actions">
+                                <div class="share-box">
+                                    <span class="share-box-title">COMPARTILHAR RESULTADO</span>
+                                    <div class="share-actions-row">
+                                        <button type="button" class="btn btn-primary" (click)="copyShareResult()">
+                                            @if (copyFeedback()) {
+                                                ✓ Copiado!
+                                            } @else {
+                                                📋 Copiar Resumo
+                                            }
+                                        </button>
+                                        <button type="button" class="btn btn-secondary" (click)="shareOnWhatsApp()">
+                                            WhatsApp
+                                        </button>
+                                    </div>
+                                </div>
+
+                                @if (activeMode() === 'infinite') {
+                                    <button type="button" class="btn btn-accent btn-lg next-challenge-btn" (click)="nextInfiniteChallenge()">
+                                        Próxima Moto Infinita →
+                                    </button>
+                                } @else {
+                                    <div class="daily-next-notice">
+                                        <span>Próxima moto diária em <strong>{{ countdownFormatted() }}</strong></span>
+                                        <button type="button" class="link-btn" (click)="selectArenaTab('infinite')">
+                                            Continuar no Modo Infinito →
+                                        </button>
+                                    </div>
+                                }
+                            </div>
+                        </div>
+                    }
+
+                    <!-- 3. Tabuleiro de Comparação dos 5 Atributos -->
+                    <div class="board-card">
+                        <div class="board-legend-bar">
+                            <span class="board-title">HISTÓRICO DE PALPITES</span>
+                            <div class="board-legend-items">
+                                <span class="legend-pill correct">✓ Exato</span>
+                                <span class="legend-pill warning">▲ Maior / ▼ Menor que o secreto</span>
+                                <span class="legend-pill incorrect">✗ Diferente</span>
                             </div>
                         </div>
 
-                        @if (activeMode() === 'infinite') {
-                            <button type="button" class="btn btn-accent btn-lg next-challenge-btn" (click)="nextInfiniteChallenge()">
-                                Próximo Desafio Infinito →
-                            </button>
-                        } @else {
-                            <div class="daily-next-notice">
-                                <span>Próximo Desafio Diário em <strong>{{ countdownFormatted() }}</strong></span>
-                                <button type="button" class="link-btn" (click)="selectArenaTab('infinite')">
-                                    Continuar treinando no Modo Infinito →
-                                </button>
+                        <div class="board-wrapper">
+                            <div class="board-headers">
+                                <div class="board-col-header">Fabricante</div>
+                                <div class="board-col-header">Modelo</div>
+                                <div class="board-col-header">Cilindrada</div>
+                                <div class="board-col-header">Peso</div>
+                                <div class="board-col-header">Estilo</div>
                             </div>
-                        }
+
+                            <div class="board-rows">
+                                @for (guess of round.guesses; track trackGuess($index, guess); let idx = $index) {
+                                    <div class="board-row">
+                                        <!-- Fabricante -->
+                                        <div class="board-cell" [class.correct]="guess.manufacturerStatus === 'correct'" [class.incorrect]="guess.manufacturerStatus === 'incorrect'">
+                                            <span class="cell-mobile-label">Fabricante</span>
+                                            <strong class="cell-value">{{ guess.motorcycle.manufacturer }}</strong>
+                                            <span class="attribute-result" [class.correct]="guess.manufacturerStatus === 'correct'" [class.incorrect]="guess.manufacturerStatus === 'incorrect'">
+                                                {{ guess.manufacturerStatus === 'correct' ? '✓ CORRETO' : '✗ ERRADO' }}
+                                            </span>
+                                        </div>
+
+                                        <!-- Modelo -->
+                                        <div class="board-cell" [class.correct]="guess.modelStatus === 'correct'" [class.incorrect]="guess.modelStatus === 'incorrect'">
+                                            <span class="cell-mobile-label">Modelo</span>
+                                            <strong class="cell-value">{{ guess.motorcycle.model }}</strong>
+                                            <span class="attribute-result" [class.correct]="guess.modelStatus === 'correct'" [class.incorrect]="guess.modelStatus === 'incorrect'">
+                                                {{ guess.modelStatus === 'correct' ? '✓ CORRETO' : '✗ ERRADO' }}
+                                            </span>
+                                        </div>
+
+                                        <!-- Cilindrada -->
+                                        <div
+                                            class="board-cell"
+                                            [class.correct]="guess.displacementStatus === 'correct'"
+                                            [class.higher]="guess.displacementStatus === 'higher'"
+                                            [class.lower]="guess.displacementStatus === 'lower'"
+                                        >
+                                            <span class="cell-mobile-label">Cilindrada</span>
+                                            <strong class="cell-value mono">{{ guess.motorcycle.displacementCc }} cc</strong>
+                                            <span
+                                                class="attribute-result"
+                                                [class.correct]="guess.displacementStatus === 'correct'"
+                                                [class.higher]="guess.displacementStatus === 'higher'"
+                                                [class.lower]="guess.displacementStatus === 'lower'"
+                                            >
+                                                {{ describeNumericStatus(guess.displacementStatus) }}
+                                            </span>
+                                        </div>
+
+                                        <!-- Peso -->
+                                        <div
+                                            class="board-cell"
+                                            [class.correct]="guess.weightStatus === 'correct'"
+                                            [class.higher]="guess.weightStatus === 'higher'"
+                                            [class.lower]="guess.weightStatus === 'lower'"
+                                        >
+                                            <span class="cell-mobile-label">Peso</span>
+                                            <strong class="cell-value mono">{{ guess.motorcycle.weightKg }} kg</strong>
+                                            <span
+                                                class="attribute-result"
+                                                [class.correct]="guess.weightStatus === 'correct'"
+                                                [class.higher]="guess.weightStatus === 'higher'"
+                                                [class.lower]="guess.weightStatus === 'lower'"
+                                            >
+                                                {{ describeNumericStatus(guess.weightStatus) }}
+                                            </span>
+                                        </div>
+
+                                        <!-- Estilo -->
+                                        <div class="board-cell" [class.correct]="guess.styleStatus === 'correct'" [class.incorrect]="guess.styleStatus === 'incorrect'">
+                                            <span class="cell-mobile-label">Estilo</span>
+                                            <strong class="cell-value">{{ guess.motorcycle.style }}</strong>
+                                            <span class="attribute-result" [class.correct]="guess.styleStatus === 'correct'" [class.incorrect]="guess.styleStatus === 'incorrect'">
+                                                {{ guess.styleStatus === 'correct' ? '✓ CORRETO' : '✗ ERRADO' }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                }
+
+                                @if (round.guesses.length === 0) {
+                                    <div class="board-empty-state">
+                                        <p>Nenhum palpite enviado ainda. Escolha uma motocicleta no campo acima para revelar as primeiras pistas!</p>
+                                    </div>
+                                }
+
+                                @if (remainingSlots().length > 0) {
+                                    <div class="remaining-slots-strip" aria-hidden="true">
+                                        @for (slot of remainingSlots(); track slot) {
+                                            <span class="remaining-slot-pill">{{ slot }}ª tentativa disponível</span>
+                                        }
+                                    </div>
+                                }
+                            </div>
+                        </div>
                     </div>
                 </div>
-            }
 
-            <!-- Tabuleiro de Comparação dos 5 Atributos -->
-            <div class="board-wrapper">
-                <div class="board-headers">
-                    <div class="board-col-header">Fabricante</div>
-                    <div class="board-col-header">Modelo</div>
-                    <div class="board-col-header">Cilindrada</div>
-                    <div class="board-col-header">Peso</div>
-                    <div class="board-col-header">Estilo</div>
-                </div>
-
-                <div class="board-rows">
-                    @for (guess of round.guesses; track trackGuess($index, guess); let idx = $index) {
-                        <div class="board-row">
-                            <!-- Fabricante -->
-                            <div class="board-cell" [class.correct]="guess.manufacturerStatus === 'correct'" [class.incorrect]="guess.manufacturerStatus === 'incorrect'">
-                                <span class="cell-mobile-label">Fabricante</span>
-                                <strong class="cell-value">{{ guess.motorcycle.manufacturer }}</strong>
-                                <span class="attribute-result" [class.correct]="guess.manufacturerStatus === 'correct'" [class.incorrect]="guess.manufacturerStatus === 'incorrect'">
-                                    {{ guess.manufacturerStatus === 'correct' ? '✓ CORRETO' : '✗ INCORRETO' }}
-                                </span>
+                <!-- COLUNA LATERAL (BOX): Dicas Rápidas + Chat do Chefe de Box (Google Gemini WebSocket) -->
+                <aside class="arena-sidebar-col">
+                    <!-- Card 1: Dicas Rápidas (FIPE & Top Speed) -->
+                    <div class="sidebar-hints-card">
+                        <div class="sidebar-card-header">
+                            <div>
+                                <span class="arena-hint-tag">TELEMETRIA DE BOX</span>
+                                <h3>Dicas Extras</h3>
                             </div>
-
-                            <!-- Modelo -->
-                            <div class="board-cell" [class.correct]="guess.modelStatus === 'correct'" [class.incorrect]="guess.modelStatus === 'incorrect'">
-                                <span class="cell-mobile-label">Modelo</span>
-                                <strong class="cell-value">{{ guess.motorcycle.model }}</strong>
-                                <span class="attribute-result" [class.correct]="guess.modelStatus === 'correct'" [class.incorrect]="guess.modelStatus === 'incorrect'">
-                                    {{ guess.modelStatus === 'correct' ? '✓ CORRETO' : '✗ INCORRETO' }}
-                                </span>
-                            </div>
-
-                            <!-- Cilindrada -->
-                            <div
-                                class="board-cell"
-                                [class.correct]="guess.displacementStatus === 'correct'"
-                                [class.higher]="guess.displacementStatus === 'higher'"
-                                [class.lower]="guess.displacementStatus === 'lower'"
-                            >
-                                <span class="cell-mobile-label">Cilindrada</span>
-                                <strong class="cell-value mono">{{ guess.motorcycle.displacementCc }} cc</strong>
-                                <span
-                                    class="attribute-result"
-                                    [class.correct]="guess.displacementStatus === 'correct'"
-                                    [class.higher]="guess.displacementStatus === 'higher'"
-                                    [class.lower]="guess.displacementStatus === 'lower'"
-                                >
-                                    {{ describeNumericStatus(guess.displacementStatus) }}
-                                </span>
-                            </div>
-
-                            <!-- Peso -->
-                            <div
-                                class="board-cell"
-                                [class.correct]="guess.weightStatus === 'correct'"
-                                [class.higher]="guess.weightStatus === 'higher'"
-                                [class.lower]="guess.weightStatus === 'lower'"
-                            >
-                                <span class="cell-mobile-label">Peso</span>
-                                <strong class="cell-value mono">{{ guess.motorcycle.weightKg }} kg</strong>
-                                <span
-                                    class="attribute-result"
-                                    [class.correct]="guess.weightStatus === 'correct'"
-                                    [class.higher]="guess.weightStatus === 'higher'"
-                                    [class.lower]="guess.weightStatus === 'lower'"
-                                >
-                                    {{ describeNumericStatus(guess.weightStatus) }}
-                                </span>
-                            </div>
-
-                            <!-- Estilo -->
-                            <div class="board-cell" [class.correct]="guess.styleStatus === 'correct'" [class.incorrect]="guess.styleStatus === 'incorrect'">
-                                <span class="cell-mobile-label">Estilo</span>
-                                <strong class="cell-value">{{ guess.motorcycle.style }}</strong>
-                                <span class="attribute-result" [class.correct]="guess.styleStatus === 'correct'" [class.incorrect]="guess.styleStatus === 'incorrect'">
-                                    {{ guess.styleStatus === 'correct' ? '✓ CORRETO' : '✗ INCORRETO' }}
-                                </span>
+                            <div class="hint-bonus-badge" [class.positive]="!round.aiChatUsed && currentHintBonusPreview() > 0" [class.negative]="round.aiChatUsed || currentHintBonusPreview() < 0">
+                                @if (round.aiChatUsed) {
+                                    0 PTS (IA USADA)
+                                } @else {
+                                    BÔNUS: {{ currentHintBonusPreview() >= 0 ? '+' : '' }}{{ currentHintBonusPreview() }} PTS
+                                }
                             </div>
                         </div>
-                    }
 
-                    @for (slot of remainingSlots(); track slot) {
-                        <div class="board-row empty-row" aria-hidden="true">
-                            <div class="board-cell empty-cell"><span>{{ slot }}ª Tentativa</span></div>
-                            <div class="board-cell empty-cell"><span>—</span></div>
-                            <div class="board-cell empty-cell"><span>— cc</span></div>
-                            <div class="board-cell empty-cell"><span>— kg</span></div>
-                            <div class="board-cell empty-cell"><span>—</span></div>
+                        <div class="compact-hints-grid">
+                            <div class="compact-hint-item" [class.revealed]="round.fipeHintUsed || round.status !== 'playing'">
+                                <span class="compact-hint-label">💰 Tabela FIPE</span>
+                                @if (round.fipeHintUsed || round.status !== 'playing') {
+                                    <strong class="compact-hint-val mono">{{ round.target.fipePrice }}</strong>
+                                } @else {
+                                    <button type="button" class="hint-action-btn compact" (click)="revealFipeHint()">
+                                        Revelar (-200 pts)
+                                    </button>
+                                }
+                            </div>
+
+                            <div class="compact-hint-item" [class.revealed]="round.topSpeedHintUsed || round.status !== 'playing'">
+                                <span class="compact-hint-label">⚡ Vel. Máxima</span>
+                                @if (round.topSpeedHintUsed || round.status !== 'playing') {
+                                    <strong class="compact-hint-val mono">{{ round.target.topSpeedKmh }} km/h</strong>
+                                } @else {
+                                    <button type="button" class="hint-action-btn compact" (click)="revealTopSpeedHint()">
+                                        Revelar (-200 pts)
+                                    </button>
+                                }
+                            </div>
                         </div>
-                    }
-                </div>
+                    </div>
+
+                    <!-- Card 2: Chat do Chefe de Box via WebSocket (Google Gemini + API Gateway $default) -->
+                    <div class="gemini-chat-panel">
+                        <div class="gemini-chat-header">
+                            <div class="gemini-chat-title-group">
+                                <span class="gemini-chat-badge">IA • GOOGLE GEMINI + WEBSOCKET ($DEFAULT)</span>
+                                <h3>🤖 Chefe de Box (Chat IA)</h3>
+                                <p>Analisa seus chutes sem saber a moto do dia. <strong>Zera os pontos da rodada ao usar.</strong></p>
+                            </div>
+
+                            <div class="gemini-ws-meta">
+                                <div
+                                    class="ws-status-pill"
+                                    [class.connected]="geminiChat.connectionStatus() === 'connected'"
+                                    [class.connecting]="geminiChat.connectionStatus() === 'connecting'"
+                                    [class.error]="geminiChat.connectionStatus() === 'error'"
+                                    [title]="geminiChat.websocketEndpoint()"
+                                >
+                                    <span class="ws-dot"></span>
+                                    @if (geminiChat.connectionStatus() === 'connected') {
+                                        WS CONECTADO • {{ geminiChat.websocketEndpoint() }}
+                                    } @else if (geminiChat.connectionStatus() === 'connecting') {
+                                        CONECTANDO WS...
+                                    } @else if (geminiChat.connectionStatus() === 'error') {
+                                        ERRO WS
+                                    } @else {
+                                        WS DESCONECTADO
+                                    }
+                                </div>
+
+                                @if (authState().status === 'authenticated') {
+                                    <button
+                                        type="button"
+                                        class="hint-action-btn ws-reconnect-btn"
+                                        (click)="reconnectChatWebSocket()"
+                                    >
+                                        ↻ Reconectar
+                                    </button>
+                                }
+                            </div>
+                        </div>
+
+                        @if (authState().status !== 'authenticated') {
+                            <div class="gemini-chat-auth-lock">
+                                <p>🔒 Faça login no Amazon Cognito para conectar ao WebSocket <code>{{ geminiChat.websocketEndpoint() }}</code> e conversar com o Gemini.</p>
+                                <a routerLink="/login" class="btn btn-primary">Entrar na Conta</a>
+                            </div>
+                        } @else {
+                            <div class="gemini-chat-messages" role="log" aria-live="polite">
+                                @for (msg of geminiChat.messages(); track msg.id) {
+                                    <div
+                                        class="gemini-msg"
+                                        [class.user]="msg.role === 'user'"
+                                        [class.model]="msg.role === 'model'"
+                                        [class.system]="msg.role === 'system'"
+                                    >
+                                        <div class="gemini-msg-meta">
+                                            <strong>
+                                                @if (msg.role === 'user') {
+                                                    Você
+                                                } @else if (msg.role === 'model') {
+                                                    🤖 Chefe de Box (Gemini)
+                                                } @else {
+                                                    ⚡ Sistema
+                                                }
+                                            </strong>
+                                            <span class="mono">{{ msg.timestamp }}</span>
+                                        </div>
+                                        <p class="gemini-msg-text">{{ msg.text }}</p>
+                                        @if (msg.candidatesRemaining !== undefined) {
+                                            <span class="gemini-candidates-pill">
+                                                {{ msg.candidatesRemaining }} moto(s) compatíveis no catálogo
+                                            </span>
+                                        }
+                                    </div>
+                                }
+
+                                @if (geminiChat.isSending()) {
+                                    <div class="gemini-msg model loading">
+                                        <div class="gemini-msg-meta">
+                                            <strong>🤖 Chefe de Box (Gemini)</strong>
+                                            <span class="mono">processando...</span>
+                                        </div>
+                                        <p class="gemini-msg-text">Consultando telemetria via AWS Lambda ($default)...</p>
+                                    </div>
+                                }
+                            </div>
+
+                            @if (geminiChat.errorMessage(); as wsErr) {
+                                <p class="guess-error">{{ wsErr }}</p>
+                            }
+
+                            <div class="gemini-quick-questions">
+                                <button
+                                    type="button"
+                                    class="quick-chip"
+                                    [disabled]="geminiChat.isSending()"
+                                    (click)="sendQuickQuestion('Me dê uma dica para descobrir a moto secreta com base nos meus chutes até agora!')"
+                                >
+                                    💡 Pedir dica sobre meus chutes
+                                </button>
+                                <button
+                                    type="button"
+                                    class="quick-chip"
+                                    [disabled]="geminiChat.isSending()"
+                                    (click)="sendQuickQuestion('Quais motos do catálogo ainda são compatíveis com as pistas atuais?')"
+                                >
+                                    🏍️ Quais motos restam?
+                                </button>
+                            </div>
+
+                            <form class="gemini-chat-form" (ngSubmit)="sendChatQuestion()">
+                                <input
+                                    type="text"
+                                    name="chatQuestionInput"
+                                    class="guess-input gemini-chat-input"
+                                    placeholder="Pergunte ao Gemini (zera pontos)..."
+                                    autocomplete="off"
+                                    [ngModel]="chatQuestion()"
+                                    (ngModelChange)="chatQuestion.set($event)"
+                                    [disabled]="geminiChat.isSending()"
+                                />
+                                <button
+                                    type="submit"
+                                    class="btn btn-primary gemini-send-btn"
+                                    [disabled]="geminiChat.isSending() || !chatQuestion().trim()"
+                                >
+                                    {{ geminiChat.isSending() ? '...' : 'Enviar' }}
+                                </button>
+                            </form>
+                        }
+                    </div>
+                </aside>
             </div>
         } @else {
-            <!-- Aba de Rankings (Pilotos & Equipes) -->
+            <!-- Aba de Rankings (Pilotos & Equipes sincronizados no DynamoDB) -->
             <div class="rankings-arena-grid">
                 <div class="ranking-panel">
                     <div class="ranking-panel-header">
-                        <h3>Ranking Geral de Pilotos</h3>
-                        <span>Pontuação acumulada nas partidas oficiais</span>
+                        <h3>🏆 Ranking Geral de Pilotos</h3>
+                        <span>Sincronizado em tempo real via Amazon DynamoDB</span>
                     </div>
                     <div class="ranking-table">
                         @for (pilot of pilotRankings; track pilot.position) {
@@ -543,8 +555,8 @@
 
                 <div class="ranking-panel">
                     <div class="ranking-panel-header">
-                        <h3>Ranking Coletivo de Equipes</h3>
-                        <span>Desempenho somado por fabricante</span>
+                        <h3>🏁 Ranking Coletivo de Equipes</h3>
+                        <span>Pontuação somada por fabricante</span>
                     </div>
                     <div class="ranking-table">
                         @for (team of teamRankings; track team.teamId) {
@@ -561,67 +573,5 @@
                 </div>
             </div>
         }
-    </div>
-</section>
-
-<section class="features-preview">
-    <div class="container">
-        <h2 class="section-title">Funcionalidades Principais</h2>
-        <div class="features-preview-grid">
-            <div class="feature-preview-card">
-                <div class="feature-preview-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <circle cx="12" cy="12" r="9" />
-                        <circle cx="12" cy="12" r="4.5" />
-                        <circle cx="12" cy="12" r="1.2" fill="currentColor" stroke="none" />
-                    </svg>
-                </div>
-                <h3>Modo Diário</h3>
-                <p>Moto secreta única para todos os jogadores a cada dia</p>
-            </div>
-            <div class="feature-preview-card">
-                <div class="feature-preview-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 12c-2-2.67-4-4-6-4a4 4 0 1 0 0 8c2 0 4-1.33 6-4Zm0 0c2 2.67 4 4 6 4a4 4 0 0 0 0-8c-2 0-4 1.33-6 4Z" />
-                    </svg>
-                </div>
-                <h3>Modo Infinito</h3>
-                <p>Desafios contínuos com motos aleatórias do catálogo</p>
-            </div>
-            <div class="feature-preview-card">
-                <div class="feature-preview-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M7 4h10v5a5 5 0 0 1-10 0V4Z" />
-                        <path d="M7 6H5.5a2.5 2.5 0 0 0 0 5H7" />
-                        <path d="M17 6h1.5a2.5 2.5 0 0 1 0 5H17" />
-                        <path d="M12 14v3" />
-                        <path d="M10 17.5h4l1 3.5H9l1-3.5Z" />
-                    </svg>
-                </div>
-                <h3>Sistema de Equipes</h3>
-                <p>Represente sua fabricante e suba nos rankings coletivos</p>
-            </div>
-            <div class="feature-preview-card">
-                <div class="feature-preview-icon">
-                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-                        <path d="M12 3a6 6 0 0 0-3.6 10.8c.7.5 1.1 1.3 1.1 2.2H14.5c0-.9.4-1.7 1.1-2.2A6 6 0 0 0 12 3Z" />
-                        <path d="M9.5 19h5" />
-                        <path d="M10.5 22h3" />
-                    </svg>
-                </div>
-                <h3>Dicas Estratégicas</h3>
-                <p>Use FIPE e velocidade máxima com impacto na pontuação</p>
-            </div>
-        </div>
-    </div>
-</section>
-
-<section class="cta-section">
-    <div class="container">
-        <div class="cta-content">
-            <h2>Pronto para acelerar seu conhecimento?</h2>
-            <p>Teste sua expertise em motos esportivas brasileiras e descubra se você tem o que é preciso para ser o melhor piloto virtual.</p>
-            <button type="button" class="btn btn-primary btn-lg" (click)="scrollToArena('infinite')">Treinar no Modo Infinito</button>
-        </div>
     </div>
 </section>

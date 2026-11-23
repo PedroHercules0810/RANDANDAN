@@ -1,9 +1,7 @@
 <section class="auth-section">
     <div class="container auth-container profile-container">
-        <h1>Meu Perfil de Piloto</h1>
-
         @if (authState().user; as user) {
-            <!-- Painel de Foto de Perfil (AWS DynamoDB + S3 Bucket "profile" + API Gateway /profile + Cognito JWT) -->
+            <!-- Cabeçalho Principal do Perfil -->
             <div class="profile-avatar-card">
                 <div class="avatar-preview-box">
                     @if (localPreviewUrl(); as preview) {
@@ -11,7 +9,7 @@
                         <span class="avatar-badge preview-badge">PRÉVIA LOCAL</span>
                     } @else if (profileImageService.imageUrl(); as s3Image) {
                         <img [src]="s3Image" alt="Foto de perfil do piloto carregada do S3 via DynamoDB" class="avatar-image" />
-                        <span class="avatar-badge s3-badge">DYNAMODB + S3</span>
+                        <span class="avatar-badge s3-badge">S3 + DYNAMODB</span>
                     } @else {
                         <div class="avatar-placeholder">
                             <span>{{ user.displayName.slice(0, 2).toUpperCase() }}</span>
@@ -20,64 +18,63 @@
                 </div>
 
                 <div class="avatar-controls">
-                    <span class="avatar-tag">AWS DYNAMODB (PK: NOME DO USUÁRIO) + S3 BUCKET: PROFILE</span>
-                    <h2>Foto de Perfil</h2>
-                    <p class="avatar-desc">
-                        Sua foto fica salva no S3 e o link é vinculado ao seu nome (<strong>{{ user.displayName }}</strong>) no <strong>Amazon DynamoDB</strong>, carregando automaticamente em qualquer navegador ou computador via <code>GET /profile</code>.
-                    </p>
+                    <div class="profile-headline-row">
+                        <div>
+                            <span class="avatar-tag">PILOTO OFICIAL RANDANDAN</span>
+                            <h1>{{ user.displayName }}</h1>
+                            <p class="profile-email-line">{{ user.email }}</p>
+                        </div>
 
-                    <div class="endpoint-config-row">
-                        <label for="profile-endpoint-input">Endpoint da rota <code>/profile</code> no API Gateway:</label>
-                        <input
-                            id="profile-endpoint-input"
-                            type="url"
-                            class="endpoint-input"
-                            [ngModel]="customEndpoint()"
-                            (ngModelChange)="customEndpoint.set($event)"
-                            placeholder="https://gaff3pwpe0.execute-api.us-east-1.amazonaws.com/profile"
-                        />
+                        <button type="button" class="btn btn-secondary" (click)="logout()" [disabled]="isLoggingOut()">
+                            {{ isLoggingOut() ? 'Saindo...' : 'Sair da Conta' }}
+                        </button>
                     </div>
 
-                    <div class="file-upload-row">
+                    <div class="profile-badges-row">
+                        <span class="profile-meta-pill">
+                            🔐 {{ user.provider === 'google' ? 'Google OAuth (Cognito)' : 'Amazon Cognito JWT' }}
+                        </span>
+                        <span class="profile-meta-pill">
+                            @if (currentTeam; as team) {
+                                🏁 Equipe: <strong>{{ team.name }}</strong> (<a routerLink="/equipe">trocar</a>)
+                            } @else {
+                                🏁 Sem equipe — <a routerLink="/equipe">escolher equipe</a>
+                            }
+                        </span>
+                    </div>
+
+                    <!-- Ações de Upload / Sincronização de Foto no S3 -->
+                    <div class="profile-photo-toolbar">
                         <label class="file-select-label" for="profile-image-input">
-                            📁 Escolher Arquivo de Imagem
+                            📷 Escolher Foto (.PNG, .JPG, .WEBP)
                         </label>
                         <input
                             id="profile-image-input"
                             type="file"
+                            class="visually-hidden-file"
                             accept="image/png,image/jpeg,image/webp,image/gif"
                             (change)="onFileSelected($event)"
                         />
+
                         @if (selectedFile(); as file) {
                             <span class="selected-file-name">{{ file.name }} ({{ (file.size / 1024).toFixed(1) }} KB)</span>
+                            <button
+                                type="button"
+                                class="btn btn-primary"
+                                [disabled]="profileImageService.isUploading()"
+                                (click)="uploadSelectedImage()"
+                            >
+                                {{ profileImageService.isUploading() ? 'Enviando...' : '⬆️ Salvar Foto (POST /profile)' }}
+                            </button>
                         }
-                    </div>
-
-                    <div class="avatar-actions-row">
-                        <button
-                            type="button"
-                            class="btn btn-primary"
-                            [disabled]="!selectedFile() || profileImageService.isUploading()"
-                            (click)="uploadSelectedImage()"
-                        >
-                            @if (profileImageService.isUploading()) {
-                                Salvando no S3 e DynamoDB (POST /profile)...
-                            } @else {
-                                ⬆️ Enviar Imagem (POST /profile)
-                            }
-                        </button>
 
                         <button
                             type="button"
-                            class="btn btn-secondary"
+                            class="hint-action-btn"
                             [disabled]="profileImageService.isLoading()"
                             (click)="reloadImageFromS3()"
                         >
-                            @if (profileImageService.isLoading()) {
-                                Consultando DynamoDB + S3 (GET /profile)...
-                            } @else {
-                                🔄 Sincronizar do DynamoDB / S3 (GET /profile)
-                            }
+                            {{ profileImageService.isLoading() ? 'Sincronizando...' : '🔄 Sincronizar (GET /profile)' }}
                         </button>
                     </div>
 
@@ -89,91 +86,99 @@
                         <p class="profile-feedback error">⚠️ {{ errMsg }}</p>
                     }
 
-                    @if (profileImageService.metadata(); as meta) {
-                        <div class="s3-meta-box">
-                            <span><strong>Chave DynamoDB ({{ meta.partitionKey || 'username' }}):</strong> {{ meta.username || user.displayName }}</span>
-                            @if (meta.tableName) {
-                                <span><strong>Tabela DynamoDB:</strong> {{ meta.tableName }}</span>
-                            }
-                            @if (meta.s3Url) {
-                                <span><strong>Link S3:</strong> <code>{{ meta.s3Url }}</code></span>
-                            }
-                            @if (meta.bucket) {
-                                <span><strong>Bucket S3:</strong> {{ meta.bucket }}</span>
-                            }
-                        </div>
-                    }
-                </div>
-            </div>
-
-            <div class="profile-info-card">
-                <p><strong>Nome (Chave Principal DynamoDB):</strong> {{ user.displayName }}</p>
-                <p><strong>E-mail:</strong> {{ user.email }}</p>
-                @if (user.provider === 'google') {
-                    <p><strong>Autenticação:</strong> Google (Cognito OAuth)</p>
-                } @else {
-                    <p><strong>Autenticação:</strong> Amazon Cognito JWT</p>
-                }
-                @if (!user.emailVerified) {
-                    <p class="auth-error">Seu e-mail ainda não foi verificado.</p>
-                }
-                <p>
-                    <strong>Equipe:</strong>
-                    @if (currentTeam; as team) {
-                        {{ team.name }}
-                    } @else {
-                        Nenhuma equipe escolhida —
-                        <a routerLink="/equipe">escolher agora</a>
-                    }
-                </p>
-            </div>
-
-            <!-- Lista de mensagens do usuário com o agente de IA armazenada no DynamoDB -->
-            <h2>Histórico de Mensagens com o Agente de IA (DynamoDB)</h2>
-            @if (profileImageService.chatMessages().length) {
-                <div class="gemini-chat-messages" style="margin-bottom: 24px;">
-                    @for (msg of profileImageService.chatMessages(); track msg.id) {
-                        <div
-                            class="gemini-msg"
-                            [class.user]="msg.role === 'user'"
-                            [class.model]="msg.role === 'model'"
-                        >
-                            <div class="gemini-msg-meta">
-                                <strong>
-                                    @if (msg.role === 'user') {
-                                        {{ msg.sender || user.displayName }} (Piloto)
-                                    } @else {
-                                        🤖 {{ msg.sender || 'Chefe de Box (Google Gemini)' }}
+                    <!-- Progressive Disclosure: Detalhes Técnicos AWS (S3, DynamoDB e Endpoint) -->
+                    <details class="aws-tech-drawer">
+                        <summary>⚙️ Dados Técnicos AWS (S3 Bucket, DynamoDB & Endpoint /profile)</summary>
+                        <div class="aws-tech-drawer-body">
+                            @if (profileImageService.metadata(); as meta) {
+                                <div class="s3-meta-box">
+                                    <span><strong>Chave DynamoDB ({{ meta.partitionKey || 'username' }}):</strong> {{ meta.username || user.displayName }}</span>
+                                    @if (meta.tableName) {
+                                        <span><strong>Tabela DynamoDB:</strong> {{ meta.tableName }}</span>
                                     }
-                                </strong>
-                                <span class="mono">{{ msg.timestamp | date: 'short' }}</span>
+                                    @if (meta.bucket) {
+                                        <span><strong>Bucket S3:</strong> {{ meta.bucket }}</span>
+                                    }
+                                    @if (meta.s3Url) {
+                                        <span><strong>Link S3:</strong> <code>{{ meta.s3Url }}</code></span>
+                                    }
+                                </div>
+                            }
+
+                            <div class="endpoint-config-row">
+                                <label for="profile-endpoint-input">Endpoint da rota <code>/profile</code> no API Gateway:</label>
+                                <input
+                                    id="profile-endpoint-input"
+                                    type="url"
+                                    class="endpoint-input"
+                                    [ngModel]="customEndpoint()"
+                                    (ngModelChange)="customEndpoint.set($event)"
+                                    placeholder="https://gaff3pwpe0.execute-api.us-east-1.amazonaws.com/profile"
+                                />
                             </div>
-                            <p class="gemini-msg-text">{{ msg.text }}</p>
                         </div>
+                    </details>
+                </div>
+            </div>
+
+            <!-- Grid Inferior em 2 Colunas: Histórico de Partidas | Histórico de Mensagens IA -->
+            <div class="profile-history-grid">
+                <div class="profile-history-panel">
+                    <div class="profile-panel-header">
+                        <h2>🏆 Histórico de Partidas</h2>
+                        <span>{{ scoreHistory.length }} partida(s) registrada(s)</span>
+                    </div>
+
+                    @if (scoreHistory.length) {
+                        <div class="score-history-list">
+                            @for (score of scoreHistory; track score.date) {
+                                <div class="score-history-item">
+                                    <div>
+                                        <strong>{{ score.mode === 'daily' ? '🎯 Desafio Diário' : '♾️ Modo Infinito' }}</strong>
+                                        <small>{{ score.date | date: 'dd/MM/yyyy HH:mm' }} • {{ score.guessCount }} tentativa(s)</small>
+                                    </div>
+                                    <span class="score-history-pts mono">+{{ score.totalPoints }} pts</span>
+                                </div>
+                            }
+                        </div>
+                    } @else {
+                        <p class="profile-empty-note">Nenhuma partida registrada ainda. Vá para a <a routerLink="/">Arena de Jogo</a> para pontuar!</p>
                     }
                 </div>
-            } @else {
-                <p style="margin-bottom: 24px;">Nenhuma mensagem trocada com o Agente de IA registrada no DynamoDB ainda.</p>
-            }
 
-            <h2>Histórico de pontuação</h2>
-            @if (scoreHistory.length) {
-                <ul>
-                    @for (score of scoreHistory; track score.date) {
-                        <li>{{ score.date | date: 'short' }} — {{ score.totalPoints }} pts ({{ score.mode }})</li>
+                <div class="profile-history-panel">
+                    <div class="profile-panel-header">
+                        <h2>🤖 Conversas com a IA (DynamoDB)</h2>
+                        <span>{{ profileImageService.chatMessages().length }} mensagem(ns)</span>
+                    </div>
+
+                    @if (profileImageService.chatMessages().length) {
+                        <div class="gemini-chat-messages">
+                            @for (msg of profileImageService.chatMessages(); track msg.id) {
+                                <div
+                                    class="gemini-msg"
+                                    [class.user]="msg.role === 'user'"
+                                    [class.model]="msg.role === 'model'"
+                                >
+                                    <div class="gemini-msg-meta">
+                                        <strong>
+                                            @if (msg.role === 'user') {
+                                                {{ msg.sender || user.displayName }}
+                                            } @else {
+                                                🤖 Chefe de Box (Gemini)
+                                            }
+                                        </strong>
+                                        <span class="mono">{{ msg.timestamp | date: 'short' }}</span>
+                                    </div>
+                                    <p class="gemini-msg-text">{{ msg.text }}</p>
+                                </div>
+                            }
+                        </div>
+                    } @else {
+                        <p class="profile-empty-note">Nenhuma pergunta enviada ao Chefe de Box (Gemini) ainda.</p>
                     }
-                </ul>
-            } @else {
-                <p>Nenhuma partida registrada ainda.</p>
-            }
-
-            <button type="button" class="btn btn-secondary btn-lg" (click)="logout()" [disabled]="isLoggingOut()">
-                @if (isLoggingOut()) {
-                    Saindo...
-                } @else {
-                    Sair
-                }
-            </button>
+                </div>
+            </div>
         }
     </div>
 </section>
