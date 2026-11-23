@@ -1,6 +1,10 @@
 import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { environment } from '../../../environments/environment';
+import { Score } from '../models/score.model';
+import { Team } from '../models/team.model';
 import { AuthService } from './auth.service';
+import { ScoreService } from './score.service';
+import { TeamService } from './team.service';
 
 export interface StoredChatMessage {
   id: string;
@@ -8,6 +12,16 @@ export interface StoredChatMessage {
   sender?: string;
   text: string;
   timestamp: string;
+}
+
+export interface DynamoRankingPilot {
+  username: string;
+  userId?: string;
+  email?: string;
+  teamId?: number | null;
+  teamName?: string;
+  totalPoints: number;
+  s3Url?: string | null;
 }
 
 export interface ProfileImageMetadata {
@@ -35,6 +49,8 @@ const MAX_IMAGE_SIZE_BYTES = 5 * 1024 * 1024; // 5 MB
 @Injectable({ providedIn: 'root' })
 export class ProfileImageService {
   private readonly authService = inject(AuthService);
+  private readonly scoreService = inject(ScoreService);
+  private readonly teamService = inject(TeamService);
 
   private readonly endpointSignal = signal<string>(
     (environment as { profileApiUrl?: string }).profileApiUrl || DEFAULT_PROFILE_API_URL,
@@ -42,6 +58,7 @@ export class ProfileImageService {
   private readonly imageUrlSignal = signal<string | null>(null);
   private readonly s3UrlSignal = signal<string | null>(null);
   private readonly chatMessagesSignal = signal<StoredChatMessage[]>([]);
+  private readonly globalRankingsSignal = signal<DynamoRankingPilot[]>([]);
   private readonly metadataSignal = signal<ProfileImageMetadata | null>(null);
   private readonly isLoadingSignal = signal<boolean>(false);
   private readonly isUploadingSignal = signal<boolean>(false);
@@ -52,6 +69,7 @@ export class ProfileImageService {
   readonly imageUrl = computed(() => this.imageUrlSignal());
   readonly s3Url = computed(() => this.s3UrlSignal());
   readonly chatMessages = computed(() => this.chatMessagesSignal());
+  readonly globalRankings = computed(() => this.globalRankingsSignal());
   readonly metadata = computed(() => this.metadataSignal());
   readonly isLoading = computed(() => this.isLoadingSignal());
   readonly isUploading = computed(() => this.isUploadingSignal());
@@ -61,7 +79,15 @@ export class ProfileImageService {
   private lastLoadedUsername: string | null = null;
 
   constructor() {
-    // Carrega automaticamente a imagem do S3 e o histórico de mensagens do DynamoDB
+    this.scoreService.registerDynamoSyncCallback?.((score) => {
+      void this.syncScoreToDynamoDB(score);
+    });
+
+    this.teamService.registerDynamoSyncCallback?.((team) => {
+      void this.syncTeamToDynamoDB(team);
+    });
+
+    // Carrega automaticamente a imagem do S3, histórico de mensagens, scores, equipe e ranking global do DynamoDB
     // assim que o usuário faz login (em qualquer navegador ou computador).
     effect(() => {
       const auth = this.authService.authState();
@@ -112,6 +138,7 @@ export class ProfileImageService {
    * Busca no DynamoDB (pelo nome do usuário como chave principal):
    * - O link do S3 com a imagem do usuário e carrega a imagem do S3
    * - A lista de mensagens do usuário com o agente de IA
+   * - O histórico de pontuações, equipe escolhida e o Ranking Global de todos os usuários do DynamoDB
    */
   async loadProfileImage(): Promise<void> {
     this.errorSignal.set(null);
@@ -187,10 +214,25 @@ export class ProfileImageService {
         sizeBytes?: number;
         updatedAt?: string | null;
         messages?: StoredChatMessage[];
+        scores?: Score[];
+        teamId?: number | null;
+        rankings?: DynamoRankingPilot[];
       };
 
       if (Array.isArray(data?.messages)) {
         this.chatMessagesSignal.set(data.messages);
+      }
+
+      if (Array.isArray(data?.scores) && data.scores.length > 0) {
+        this.scoreService.hydrateFromDynamoDB(data.scores);
+      }
+
+      if (data?.teamId) {
+        this.teamService.hydrateFromDynamoDB(data.teamId);
+      }
+
+      if (Array.isArray(data?.rankings)) {
+        this.globalRankingsSignal.set(data.rankings);
       }
 
       this.s3UrlSignal.set(data?.s3Url ?? null);
@@ -268,6 +310,9 @@ export class ProfileImageService {
       if (Array.isArray(data?.messages)) {
         this.chatMessagesSignal.set(data.messages);
       }
+      if (Array.isArray(data?.rankings)) {
+        this.globalRankingsSignal.set(data.rankings);
+      }
 
       this.s3UrlSignal.set(data?.s3Url ?? null);
       this.imageUrlSignal.set(data?.imageUrl || base64DataUrl);
@@ -343,6 +388,79 @@ export class ProfileImageService {
       }
     } catch {
       // Falha silenciosa de sincronização em background
+    }
+  }
+
+  /** Sincroniza nova pontuação vencida pelo usuário no DynamoDB e atualiza o Ranking Global. */
+  async syncScoreToDynamoDB(score: Score): Promise<void> {
+    try {
+      const user = this.authService.authState().user;
+      const token = await this.authService.getJwtToken();
+      if (!token || !user) {
+        return;
+      }
+
+      const currentTeam = this.teamService.getCurrentTeam();
+      const endpoint = this.endpointSignal();
+
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: 'save_score',
+          username: user.displayName,
+          score,
+          teamId: currentTeam?.id ?? null,
+          teamName: currentTeam?.name ?? 'Sem Equipe',
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (Array.isArray(data?.rankings)) {
+          this.globalRankingsSignal.set(data.rankings);
+        }
+      }
+    } catch {
+      // Ignora erro de rede em background
+    }
+  }
+
+  /** Sincroniza a equipe escolhida pelo usuário no DynamoDB e atualiza o Ranking Global. */
+  async syncTeamToDynamoDB(team: Team): Promise<void> {
+    try {
+      const user = this.authService.authState().user;
+      const token = await this.authService.getJwtToken();
+      if (!token || !user) {
+        return;
+      }
+
+      const endpoint = this.endpointSignal();
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: 'save_team',
+          username: user.displayName,
+          teamId: team.id,
+          teamName: team.name,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (Array.isArray(data?.rankings)) {
+          this.globalRankingsSignal.set(data.rankings);
+        }
+      }
+    } catch {
+      // Ignora erro de rede em background
     }
   }
 

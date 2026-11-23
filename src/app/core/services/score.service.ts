@@ -1,20 +1,31 @@
-import { Injectable, inject } from '@angular/core';
+import { Injectable, inject, signal } from '@angular/core';
 import { GameMode, Score } from '../models/score.model';
 import { User } from '../models/user.model';
 import { AuthService } from './auth.service';
 
-/**
- * Chave de persistência das pontuações por usuário, no formato
- * `randandan_scores_<sub-do-cognito>`. Sem backend de banco de dados,
- * o histórico fica salvo por usuário no próprio dispositivo.
- */
 const SCORES_STORAGE_PREFIX = 'randandan_scores_';
 
 @Injectable({ providedIn: 'root' })
 export class ScoreService {
   private readonly authService = inject(AuthService);
+  private readonly remoteScoresSignal = signal<Score[] | null>(null);
+  private onScoreRecordedCallback: ((score: Score) => void) | null = null;
 
-  /** Registra a pontuação de uma partida do usuário autenticado. */
+  /** Registra callback usado pelo ProfileImageService para sincronizar novas pontuações no DynamoDB. */
+  registerDynamoSyncCallback(cb: (score: Score) => void): void {
+    this.onScoreRecordedCallback = cb;
+  }
+
+  /** Atualiza o histórico local com os scores vindos do DynamoDB. */
+  hydrateFromDynamoDB(scores: Score[]): void {
+    const user = this.authService.authState().user;
+    this.remoteScoresSignal.set(scores);
+    if (user && scores.length > 0) {
+      this.persistScores(SCORES_STORAGE_PREFIX + user.id, scores);
+    }
+  }
+
+  /** Registra a pontuação de uma partida do usuário autenticado (localStorage + DynamoDB). */
   recordScore(params: {
     guessCount: number;
     timeBonus: number;
@@ -30,22 +41,31 @@ export class ScoreService {
       ...params,
     };
 
-    this.persistScores(SCORES_STORAGE_PREFIX + user.id, [
-      ...this.readScores(SCORES_STORAGE_PREFIX + user.id),
-      score,
-    ]);
+    const updated = [...this.getPersistedScores(), score];
+    this.remoteScoresSignal.set(updated);
+    this.persistScores(SCORES_STORAGE_PREFIX + user.id, updated);
+
+    if (this.onScoreRecordedCallback) {
+      this.onScoreRecordedCallback(score);
+    }
 
     return score;
   }
 
-  /** Histórico de pontuações do usuário autenticado. */
+  /** Histórico de pontuações do usuário autenticado (hidratado pelo DynamoDB). */
   getPersistedScores(): Score[] {
     const user = this.authService.authState().user;
     if (!user) {
       return [];
     }
 
-    return this.readScores(SCORES_STORAGE_PREFIX + user.id);
+    const remote = this.remoteScoresSignal();
+    const local = this.readScores(SCORES_STORAGE_PREFIX + user.id);
+
+    if (remote && remote.length >= local.length) {
+      return remote;
+    }
+    return local;
   }
 
   /** Apenas usuários autenticados no Cognito entram no ranking. */

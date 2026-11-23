@@ -12,6 +12,7 @@ import {
 import { GameMode } from '../models/score.model';
 import { AuthService } from './auth.service';
 import { MotorcycleService } from './motorcycle.service';
+import { ProfileImageService } from './profile-image.service';
 import { ScoreService } from './score.service';
 import { TeamService } from './team.service';
 
@@ -40,6 +41,7 @@ export class GameService {
   private readonly scoreService = inject(ScoreService);
   private readonly teamService = inject(TeamService);
   private readonly authService = inject(AuthService);
+  private readonly profileImageService = inject(ProfileImageService);
 
   private readonly dailyRoundState = signal<RoundState>(this.createInitialDailyRound());
   private readonly infiniteRoundState = signal<RoundState>(this.createFreshInfiniteRound());
@@ -321,7 +323,10 @@ export class GameService {
     ].join('\n');
   }
 
-  /** Ranking geral de pilotos combinando a pontuação do jogador autenticado. */
+  /**
+   * Ranking geral de pilotos combinando todos os usuários reais salvos no DynamoDB
+   * (em qualquer computador) com a pontuação do jogador autenticado.
+   */
   getPilotRankings(): PilotRankingEntry[] {
     const basePilots: Array<{ name: string; teamName: string; points: number; isCurrentUser: boolean }> =
       [
@@ -334,7 +339,36 @@ export class GameService {
       ];
 
     const authUser = this.authService.authState().user;
-    if (authUser) {
+    const dynamoPilots = this.profileImageService.globalRankings();
+    const seenUsernames = new Set<string>();
+
+    // Adiciona todos os pilotos reais registrados no DynamoDB (de qualquer computador)
+    for (const remotePilot of dynamoPilots) {
+      const normalized = remotePilot.username.trim().toLowerCase();
+      if (!normalized || seenUsernames.has(normalized)) {
+        continue;
+      }
+      seenUsernames.add(normalized);
+
+      const isCurrent =
+        Boolean(authUser) &&
+        (authUser!.displayName.trim().toLowerCase() === normalized ||
+          authUser!.id === remotePilot.userId);
+
+      const localScores = isCurrent ? this.scoreService.getPersistedScores() : [];
+      const localPoints = localScores.reduce((acc, s) => acc + s.totalPoints, 0);
+      const localTeam = isCurrent ? this.teamService.getCurrentTeam() : null;
+
+      basePilots.push({
+        name: isCurrent ? `${remotePilot.username} (Você)` : remotePilot.username,
+        teamName: localTeam?.name ?? remotePilot.teamName ?? 'Sem Equipe',
+        points: Math.max(remotePilot.totalPoints || 0, localPoints),
+        isCurrentUser: isCurrent,
+      });
+    }
+
+    // Caso o usuário autenticado atual ainda não tenha retornado no scan do DynamoDB
+    if (authUser && !seenUsernames.has(authUser.displayName.trim().toLowerCase())) {
       const userScores = this.scoreService.getPersistedScores();
       const totalUserPoints = userScores.reduce((acc, s) => acc + s.totalPoints, 0);
       const currentTeam = this.teamService.getCurrentTeam();
@@ -355,7 +389,10 @@ export class GameService {
       }));
   }
 
-  /** Ranking coletivo por equipes somando os pontos da equipe do jogador autenticado. */
+  /**
+   * Ranking coletivo por equipes somando os pontos e membros de todos os jogadores reais
+   * salvos no DynamoDB (em qualquer computador).
+   */
   getTeamRankings(): TeamRankingEntry[] {
     const baseTeams: Record<number, { members: number; basePoints: number }> = {
       1: { members: 1247, basePoints: 18420 },
@@ -369,9 +406,42 @@ export class GameService {
     };
 
     const currentTeam = this.teamService.getCurrentTeam();
-    const userPoints = this.scoreService
-      .getPersistedScores()
-      .reduce((acc, s) => acc + s.totalPoints, 0);
+    const authUser = this.authService.authState().user;
+    const dynamoPilots = this.profileImageService.globalRankings();
+
+    // Soma membros e pontos reais do DynamoDB por equipe
+    const extraMembersByTeam: Record<number, number> = {};
+    const extraPointsByTeam: Record<number, number> = {};
+    let currentUserIncludedInDynamo = false;
+
+    for (const pilot of dynamoPilots) {
+      const isCurrent =
+        Boolean(authUser) &&
+        (authUser!.displayName.trim().toLowerCase() === pilot.username.trim().toLowerCase() ||
+          authUser!.id === pilot.userId);
+
+      if (isCurrent) {
+        currentUserIncludedInDynamo = true;
+      }
+
+      const tid = isCurrent ? (currentTeam?.id ?? pilot.teamId) : pilot.teamId;
+      if (tid) {
+        extraMembersByTeam[tid] = (extraMembersByTeam[tid] ?? 0) + 1;
+        const localPoints = isCurrent
+          ? this.scoreService.getPersistedScores().reduce((acc, s) => acc + s.totalPoints, 0)
+          : 0;
+        extraPointsByTeam[tid] =
+          (extraPointsByTeam[tid] ?? 0) + Math.max(pilot.totalPoints || 0, localPoints);
+      }
+    }
+
+    if (!currentUserIncludedInDynamo && currentTeam) {
+      const userPoints = this.scoreService
+        .getPersistedScores()
+        .reduce((acc, s) => acc + s.totalPoints, 0);
+      extraMembersByTeam[currentTeam.id] = (extraMembersByTeam[currentTeam.id] ?? 0) + 1;
+      extraPointsByTeam[currentTeam.id] = (extraPointsByTeam[currentTeam.id] ?? 0) + userPoints;
+    }
 
     const entries = this.teamService.listTeams().map((team) => {
       const stats = baseTeams[team.id] ?? { members: 150, basePoints: 5000 };
@@ -382,8 +452,8 @@ export class GameService {
         teamId: team.id,
         name: team.name,
         manufacturer: team.manufacturer,
-        members: stats.members + (isCurrentTeam ? 1 : 0),
-        points: stats.basePoints + (isCurrentTeam ? userPoints : 0),
+        members: stats.members + (extraMembersByTeam[team.id] ?? 0),
+        points: stats.basePoints + (extraPointsByTeam[team.id] ?? 0),
         isCurrentTeam,
       };
     });

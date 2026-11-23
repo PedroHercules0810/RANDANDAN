@@ -14,6 +14,7 @@ import { AuthService } from '../../core/services/auth.service';
 import { GameService, MAX_ATTEMPTS } from '../../core/services/game.service';
 import { GeminiChatService } from '../../core/services/gemini-chat.service';
 import { MotorcycleService } from '../../core/services/motorcycle.service';
+import { ProfileImageService } from '../../core/services/profile-image.service';
 import { TeamService } from '../../core/services/team.service';
 
 export type ArenaTab = 'daily' | 'infinite' | 'rankings';
@@ -29,6 +30,7 @@ export class Home implements OnInit, OnDestroy {
   private readonly motorcycleService = inject(MotorcycleService);
   private readonly gameService = inject(GameService);
   private readonly teamService = inject(TeamService);
+  private readonly profileImageService = inject(ProfileImageService);
   protected readonly geminiChat = inject(GeminiChatService);
 
   protected readonly maxAttempts = MAX_ATTEMPTS;
@@ -120,6 +122,9 @@ export class Home implements OnInit, OnDestroy {
     this.feedbackError.set(null);
     this.copyFeedback.set(false);
     this.dropdownOpen.set(false);
+    if (tab === 'rankings' && this.authState().status === 'authenticated') {
+      void this.profileImageService.loadProfileImage();
+    }
   }
 
   protected scrollToArena(tab?: ArenaTab): void {

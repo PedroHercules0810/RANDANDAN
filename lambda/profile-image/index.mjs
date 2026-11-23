@@ -1,8 +1,8 @@
 import {
   DescribeTableCommand,
   DynamoDBClient,
-  GetItemCommand,
   ListTablesCommand,
+  ScanCommand,
   UpdateItemCommand,
 } from '@aws-sdk/client-dynamodb';
 import {
@@ -42,11 +42,6 @@ const CORS_HEADERS = {
 let cachedBucketName = null;
 let cachedTableSchema = null;
 
-/**
- * Descobre o nome do bucket S3 de imagens de perfil:
- * 1) Variável de ambiente BUCKET_NAME / PROFILE_BUCKET_NAME
- * 2) Busca automática na conta AWS por um bucket cujo nome contenha "profile"
- */
 async function resolveProfileBucketName() {
   const envBucket =
     process.env.BUCKET_NAME ||
@@ -71,14 +66,8 @@ async function resolveProfileBucketName() {
   return 'profile';
 }
 
-/**
- * Descobre automaticamente a tabela do DynamoDB e o nome exato da sua Chave Principal (Partition Key)
- * usando ListTables + DescribeTable, ou lê DYNAMODB_TABLE_NAME se configurada.
- */
 async function resolveDynamoTableSchema() {
-  if (cachedTableSchema) {
-    return cachedTableSchema;
-  }
+  if (cachedTableSchema) return cachedTableSchema;
 
   let tableName =
     process.env.DYNAMODB_TABLE_NAME ||
@@ -100,9 +89,7 @@ async function resolveDynamoTableSchema() {
     }
   }
 
-  if (!tableName) {
-    tableName = 'profile';
-  }
+  if (!tableName) tableName = 'profile';
 
   let hashKeyName = process.env.DYNAMODB_PK_NAME || 'username';
   let rangeKeyName = null;
@@ -114,49 +101,32 @@ async function resolveDynamoTableSchema() {
     const attrDefs = Table?.AttributeDefinitions || [];
 
     const hashEntry = keySchema.find((k) => k.KeyType === 'HASH');
-    if (hashEntry?.AttributeName) {
-      hashKeyName = hashEntry.AttributeName;
-    }
+    if (hashEntry?.AttributeName) hashKeyName = hashEntry.AttributeName;
 
     const rangeEntry = keySchema.find((k) => k.KeyType === 'RANGE');
     if (rangeEntry?.AttributeName) {
       rangeKeyName = rangeEntry.AttributeName;
       const def = attrDefs.find((a) => a.AttributeName === rangeKeyName);
-      if (def?.AttributeType) {
-        rangeKeyType = def.AttributeType;
-      }
+      if (def?.AttributeType) rangeKeyType = def.AttributeType;
     }
   } catch (err) {
-    console.warn(
-      `[RANDANDAN Profile Lambda] Não foi possível descrever a tabela "${tableName}", usando chave padrão "${hashKeyName}":`,
-      err?.message || err,
-    );
+    console.warn(`[RANDANDAN Profile Lambda] DescribeTable (${tableName}):`, err?.message || err);
   }
 
   cachedTableSchema = { tableName, hashKeyName, rangeKeyName, rangeKeyType };
-  console.log('[RANDANDAN Profile Lambda] Schema DynamoDB resolvido:', JSON.stringify(cachedTableSchema));
   return cachedTableSchema;
 }
 
 function buildDynamoKey(schema, username) {
-  const key = {
-    [schema.hashKeyName]: { S: String(username) },
-  };
+  const key = { [schema.hashKeyName]: { S: String(username) } };
   if (schema.rangeKeyName) {
-    key[schema.rangeKeyName] =
-      schema.rangeKeyType === 'N' ? { N: '0' } : { S: 'profile' };
+    key[schema.rangeKeyName] = schema.rangeKeyType === 'N' ? { N: '0' } : { S: 'profile' };
   }
   return key;
 }
 
-/**
- * Converte a lista de mensagens do formato AttributeValue do DynamoDB para array JS.
- */
 function parseDynamoMessages(listAttr) {
-  if (!listAttr?.L || !Array.isArray(listAttr.L)) {
-    return [];
-  }
-
+  if (!listAttr?.L || !Array.isArray(listAttr.L)) return [];
   return listAttr.L.map((item) => {
     const m = item?.M || {};
     return {
@@ -169,9 +139,6 @@ function parseDynamoMessages(listAttr) {
   }).filter((msg) => msg.text);
 }
 
-/**
- * Converte um array de mensagens JS para o formato AttributeValue (L) do DynamoDB.
- */
 function toDynamoMessagesList(messages) {
   return messages
     .filter((m) => m && m.text)
@@ -186,10 +153,73 @@ function toDynamoMessagesList(messages) {
     }));
 }
 
+function parseDynamoScores(listAttr) {
+  if (!listAttr?.L || !Array.isArray(listAttr.L)) return [];
+  return listAttr.L.map((item) => {
+    const s = item?.M || {};
+    return {
+      userId: s.userId?.S || '',
+      date: s.date?.S || new Date().toISOString(),
+      guessCount: Number(s.guessCount?.N || 0),
+      timeBonus: Number(s.timeBonus?.N || 0),
+      hintsUsed: Number(s.hintsUsed?.N || 0),
+      totalPoints: Number(s.totalPoints?.N || 0),
+      mode: s.mode?.S === 'infinite' ? 'infinite' : 'daily',
+    };
+  });
+}
+
+function toDynamoScoreMap(score, userId) {
+  return {
+    M: {
+      userId: { S: String(score.userId || userId) },
+      date: { S: String(score.date || new Date().toISOString()) },
+      guessCount: { N: String(Number(score.guessCount || 1)) },
+      timeBonus: { N: String(Number(score.timeBonus || 0)) },
+      hintsUsed: { N: String(Number(score.hintsUsed || 0)) },
+      totalPoints: { N: String(Number(score.totalPoints || 0)) },
+      mode: { S: String(score.mode || 'daily') },
+    },
+  };
+}
+
 /**
- * Extrai e valida o usuário autenticado a partir do JWT do Amazon Cognito
- * e resolve o "nome do usuário" (usado como chave principal no DynamoDB).
+ * Escaneia todos os pilotos registrados na tabela do DynamoDB para montar o
+ * Ranking Global compartilhado entre todos os computadores.
  */
+async function scanGlobalRankings(schema) {
+  try {
+    const { Items } = await dynamo.send(
+      new ScanCommand({
+        TableName: schema.tableName,
+      }),
+    );
+
+    if (!Array.isArray(Items)) return [];
+
+    return Items.map((item) => {
+      const username = item?.[schema.hashKeyName]?.S || item?.username?.S || item?.name?.S || '';
+      const scores = parseDynamoScores(item?.scores);
+      const calculatedPoints = scores.reduce((acc, s) => acc + (s.totalPoints || 0), 0);
+      const totalPoints =
+        item?.totalPoints?.N !== undefined ? Number(item.totalPoints.N) : calculatedPoints;
+
+      return {
+        username,
+        userId: item?.userId?.S || '',
+        email: item?.email?.S || '',
+        teamId: item?.teamId?.N ? Number(item.teamId.N) : null,
+        teamName: item?.teamName?.S || 'Sem Equipe',
+        totalPoints,
+        s3Url: item?.s3Url?.S || item?.imageUrl?.S || null,
+      };
+    }).filter((entry) => Boolean(entry.username));
+  } catch (err) {
+    console.warn('[RANDANDAN Profile Lambda] Aviso ao escanear ranking global no DynamoDB:', err?.message || err);
+    return [];
+  }
+}
+
 function extractAuthenticatedUser(event, parsedBody = null) {
   const authorizerClaims =
     event?.requestContext?.authorizer?.jwt?.claims ||
@@ -208,40 +238,23 @@ function extractAuthenticatedUser(event, parsedBody = null) {
     try {
       const payloadBase64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
       jwtClaims = JSON.parse(Buffer.from(payloadBase64, 'base64').toString('utf-8')) || {};
-      if (jwtClaims.exp && Date.now() >= Number(jwtClaims.exp) * 1000) {
-        return null;
-      }
-    } catch {
-      // Ignora erro de parse se authorizerClaims já existir
-    }
+      if (jwtClaims.exp && Date.now() >= Number(jwtClaims.exp) * 1000) return null;
+    } catch {}
   }
 
   const claims = { ...jwtClaims, ...authorizerClaims };
   const sub = claims.sub;
-  if (!sub) {
-    return null;
-  }
+  if (!sub) return null;
 
   const email = String(claims.email || claims['cognito:username'] || sub);
   const emailPrefix = email.includes('@') ? email.split('@')[0] : email;
-
-  const explicitUsername =
-    parsedBody?.username ||
-    event?.queryStringParameters?.username ||
-    '';
-
+  const explicitUsername = parsedBody?.username || event?.queryStringParameters?.username || '';
   const tokenDisplayName =
-    claims.name ||
-    claims.given_name ||
-    claims.preferred_username ||
-    claims.nickname ||
-    emailPrefix;
-
-  const username = String(explicitUsername || tokenDisplayName || sub).trim();
+    claims.name || claims.given_name || claims.preferred_username || claims.nickname || emailPrefix;
 
   return {
     userId: String(sub),
-    username,
+    username: String(explicitUsername || tokenDisplayName || sub).trim(),
     email,
   };
 }
@@ -271,48 +284,16 @@ function detectImageMimeFromMagicBytes(buffer) {
   return null;
 }
 
-/**
- * Extrai S3 bucket e key a partir de um link https://bucket.s3.region.amazonaws.com/key ou s3://bucket/key
- */
 function parseS3Url(s3Url, defaultBucket) {
   if (!s3Url) return null;
   const trimmed = String(s3Url).trim();
-
-  if (trimmed.startsWith('s3://')) {
-    const withoutProto = trimmed.slice(5);
-    const slashIdx = withoutProto.indexOf('/');
-    if (slashIdx !== -1) {
-      return {
-        bucket: withoutProto.slice(0, slashIdx),
-        key: decodeURIComponent(withoutProto.slice(slashIdx + 1)),
-      };
-    }
-  }
-
   try {
     const url = new URL(trimmed);
     const hostParts = url.hostname.split('.');
-    // Formato virtual-hosted: <bucket>.s3.<region>.amazonaws.com/<key>
     if (hostParts[1] === 's3' && hostParts[0]) {
-      return {
-        bucket: hostParts[0],
-        key: decodeURIComponent(url.pathname.replace(/^\/+/, '')),
-      };
+      return { bucket: hostParts[0], key: decodeURIComponent(url.pathname.replace(/^\/+/, '')) };
     }
-    // Formato path-style: s3.<region>.amazonaws.com/<bucket>/<key>
-    if (hostParts[0] === 's3') {
-      const pathParts = url.pathname.replace(/^\/+/, '').split('/');
-      if (pathParts.length >= 2) {
-        return {
-          bucket: pathParts[0],
-          key: decodeURIComponent(pathParts.slice(1).join('/')),
-        };
-      }
-    }
-  } catch {
-    // Fallback abaixo
-  }
-
+  } catch {}
   return { bucket: defaultBucket, key: trimmed };
 }
 
@@ -331,9 +312,7 @@ function parseIncomingImagePayload(event, parsedJsonBody) {
     const rawBase64 = String(
       parsedJsonBody.imageBase64 || parsedJsonBody.image || parsedJsonBody.data || '',
     ).trim();
-    if (!rawBase64) {
-      throw new Error('O campo "imageBase64" é obrigatório.');
-    }
+    if (!rawBase64) throw new Error('O campo "imageBase64" é obrigatório.');
 
     let declaredMime = String(parsedJsonBody.contentType || '').toLowerCase().trim();
     let base64Clean = rawBase64;
@@ -348,9 +327,7 @@ function parseIncomingImagePayload(event, parsedJsonBody) {
     const finalMime = magicMime || declaredMime;
 
     if (!magicMime || !ALLOWED_IMAGE_MIME_TYPES.has(finalMime)) {
-      throw new Error(
-        'Arquivo inválido! Apenas arquivos de imagem (PNG, JPEG, WEBP ou GIF) são permitidos.',
-      );
+      throw new Error('Arquivo inválido! Apenas arquivos de imagem (PNG, JPEG, WEBP ou GIF) são permitidos.');
     }
 
     return {
@@ -370,9 +347,7 @@ function parseIncomingImagePayload(event, parsedJsonBody) {
   const finalMime = magicMime || rawContentType;
 
   if (!magicMime || !ALLOWED_IMAGE_MIME_TYPES.has(finalMime)) {
-    throw new Error(
-      'Arquivo inválido! Envie exclusivamente um arquivo de imagem válido (PNG, JPEG, WEBP ou GIF).',
-    );
+    throw new Error('Arquivo inválido! Envie exclusivamente um arquivo de imagem válido (PNG, JPEG, WEBP ou GIF).');
   }
 
   return {
@@ -389,7 +364,6 @@ export const handler = async (event) => {
     return { statusCode: 204, headers: CORS_HEADERS, body: '' };
   }
 
-  // Parse opcional de JSON caso seja POST
   let parsedJsonBody = null;
   if (method === 'POST' && event?.body) {
     if (typeof event.body === 'object' && !Buffer.isBuffer(event.body)) {
@@ -399,11 +373,7 @@ export const handler = async (event) => {
         ? Buffer.from(event.body, 'base64').toString('utf-8')
         : event.body;
       if (rawStr.trim().startsWith('{')) {
-        try {
-          parsedJsonBody = JSON.parse(rawStr);
-        } catch {
-          parsedJsonBody = null;
-        }
+        try { parsedJsonBody = JSON.parse(rawStr); } catch { parsedJsonBody = null; }
       }
     }
   }
@@ -413,9 +383,7 @@ export const handler = async (event) => {
     return {
       statusCode: 401,
       headers: CORS_HEADERS,
-      body: JSON.stringify({
-        error: 'Não autorizado. Token JWT do Amazon Cognito ausente ou inválido.',
-      }),
+      body: JSON.stringify({ error: 'Não autorizado. Token JWT do Amazon Cognito ausente ou inválido.' }),
     };
   }
 
@@ -426,31 +394,34 @@ export const handler = async (event) => {
   try {
     // =========================================================================
     // POST /profile
-    // - Sub-ação 1: Sincronizar mensagens do chat com o agente de IA no DynamoDB
-    // - Sub-ação 2: Upload de imagem de perfil no S3 + salvar link do S3 no DynamoDB
+    // - Sub-ação 1 (append_messages): Salva mensagens do chat com o agente de IA
+    // - Sub-ação 2 (save_score): Registra pontuação de partida no DynamoDB e atualiza ranking
+    // - Sub-ação 3 (save_team): Salva a equipe escolhida pelo usuário no DynamoDB
+    // - Sub-ação 4 (padrão): Upload de imagem de perfil no S3 + link no DynamoDB
     // =========================================================================
     if (method === 'POST') {
+      const updatedAt = new Date().toISOString();
+
       if (parsedJsonBody?.action === 'append_messages' && Array.isArray(parsedJsonBody.messages)) {
         const newDynamoMsgs = toDynamoMessagesList(parsedJsonBody.messages);
-        const updatedAt = new Date().toISOString();
 
         const updateRes = await dynamo.send(
           new UpdateItemCommand({
             TableName: tableSchema.tableName,
             Key: dynamoKey,
             UpdateExpression:
-              'SET messages = list_append(if_not_exists(messages, :empty_list), :new_msgs), updatedAt = :u, email = :e',
+              'SET messages = list_append(if_not_exists(messages, :empty_list), :new_msgs), updatedAt = :u, email = :e, userId = :uid',
             ExpressionAttributeValues: {
               ':empty_list': { L: [] },
               ':new_msgs': { L: newDynamoMsgs },
               ':u': { S: updatedAt },
               ':e': { S: user.email },
+              ':uid': { S: user.userId },
             },
             ReturnValues: 'ALL_NEW',
           }),
         );
 
-        const allMessages = parseDynamoMessages(updateRes.Attributes?.messages);
         return {
           statusCode: 200,
           headers: CORS_HEADERS,
@@ -458,29 +429,102 @@ export const handler = async (event) => {
             message: 'Mensagens salvas no DynamoDB com sucesso!',
             username: user.username,
             tableName: tableSchema.tableName,
-            messages: allMessages,
+            messages: parseDynamoMessages(updateRes.Attributes?.messages),
+          }),
+        };
+      }
+
+      if (parsedJsonBody?.action === 'save_team') {
+        const teamId = Number(parsedJsonBody.teamId || 0);
+        const teamName = String(parsedJsonBody.teamName || 'Sem Equipe');
+
+        await dynamo.send(
+          new UpdateItemCommand({
+            TableName: tableSchema.tableName,
+            Key: dynamoKey,
+            UpdateExpression:
+              'SET teamId = :tid, teamName = :tname, updatedAt = :u, email = :e, userId = :uid, totalPoints = if_not_exists(totalPoints, :zero), scores = if_not_exists(scores, :empty_list), messages = if_not_exists(messages, :empty_list)',
+            ExpressionAttributeValues: {
+              ':tid': { N: String(teamId) },
+              ':tname': { S: teamName },
+              ':u': { S: updatedAt },
+              ':e': { S: user.email },
+              ':uid': { S: user.userId },
+              ':zero': { N: '0' },
+              ':empty_list': { L: [] },
+            },
+          }),
+        );
+
+        const rankings = await scanGlobalRankings(tableSchema);
+        return {
+          statusCode: 200,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({
+            message: 'Equipe salva no DynamoDB com sucesso!',
+            username: user.username,
+            teamId,
+            teamName,
+            rankings,
+          }),
+        };
+      }
+
+      if (parsedJsonBody?.action === 'save_score' && parsedJsonBody.score) {
+        const newScoreItem = toDynamoScoreMap(parsedJsonBody.score, user.userId);
+        const addedPoints = Number(parsedJsonBody.score.totalPoints || 0);
+        const teamId = parsedJsonBody.teamId ? Number(parsedJsonBody.teamId) : null;
+        const teamName = parsedJsonBody.teamName ? String(parsedJsonBody.teamName) : null;
+
+        let updateExpr =
+          'SET scores = list_append(if_not_exists(scores, :empty_list), :new_score), totalPoints = if_not_exists(totalPoints, :zero) + :pts, updatedAt = :u, email = :e, userId = :uid, messages = if_not_exists(messages, :empty_list)';
+        const exprValues = {
+          ':empty_list': { L: [] },
+          ':new_score': { L: [newScoreItem] },
+          ':zero': { N: '0' },
+          ':pts': { N: String(addedPoints) },
+          ':u': { S: updatedAt },
+          ':e': { S: user.email },
+          ':uid': { S: user.userId },
+        };
+
+        if (teamId && teamName) {
+          updateExpr += ', teamId = :tid, teamName = :tname';
+          exprValues[':tid'] = { N: String(teamId) };
+          exprValues[':tname'] = { S: teamName };
+        }
+
+        const updateRes = await dynamo.send(
+          new UpdateItemCommand({
+            TableName: tableSchema.tableName,
+            Key: dynamoKey,
+            UpdateExpression: updateExpr,
+            ExpressionAttributeValues: exprValues,
+            ReturnValues: 'ALL_NEW',
+          }),
+        );
+
+        const rankings = await scanGlobalRankings(tableSchema);
+        return {
+          statusCode: 200,
+          headers: CORS_HEADERS,
+          body: JSON.stringify({
+            message: 'Pontuação salva no DynamoDB e ranking global atualizado!',
+            username: user.username,
+            totalPoints: Number(updateRes.Attributes?.totalPoints?.N || 0),
+            scores: parseDynamoScores(updateRes.Attributes?.scores),
+            rankings,
           }),
         };
       }
 
       // Upload de imagem de perfil exclusivamente
       const { buffer, contentType, fileName } = parseIncomingImagePayload(event, parsedJsonBody);
-      const maxBytes = 5 * 1024 * 1024;
-      if (buffer.length > maxBytes) {
-        return {
-          statusCode: 400,
-          headers: CORS_HEADERS,
-          body: JSON.stringify({ error: 'A imagem excede o tamanho máximo permitido de 5 MB.' }),
-        };
-      }
-
       const ext = MIME_TO_EXT[contentType] || 'png';
       const userSlug = sanitizeS3Slug(user.username);
       const objectKey = `profiles/${userSlug}/avatar.${ext}`;
       const s3Url = `https://${bucketName}.s3.${REGION}.amazonaws.com/${objectKey}`;
-      const updatedAt = new Date().toISOString();
 
-      // 1. Salva o arquivo de imagem no S3
       await s3.send(
         new PutObjectCommand({
           Bucket: bucketName,
@@ -497,13 +541,12 @@ export const handler = async (event) => {
         }),
       );
 
-      // 2. Salva no DynamoDB (chave principal = nome do usuário, link do S3 da imagem e lista de mensagens)
       const dynamoUpdate = await dynamo.send(
         new UpdateItemCommand({
           TableName: tableSchema.tableName,
           Key: dynamoKey,
           UpdateExpression:
-            'SET s3Url = :url, imageUrl = :url, s3Bucket = :b, s3Key = :k, contentType = :ct, updatedAt = :u, email = :e, userId = :uid, messages = if_not_exists(messages, :empty_list)',
+            'SET s3Url = :url, imageUrl = :url, s3Bucket = :b, s3Key = :k, contentType = :ct, updatedAt = :u, email = :e, userId = :uid, messages = if_not_exists(messages, :empty_list), scores = if_not_exists(scores, :empty_list), totalPoints = if_not_exists(totalPoints, :zero)',
           ExpressionAttributeValues: {
             ':url': { S: s3Url },
             ':b': { S: bucketName },
@@ -513,16 +556,13 @@ export const handler = async (event) => {
             ':e': { S: user.email },
             ':uid': { S: user.userId },
             ':empty_list': { L: [] },
+            ':zero': { N: '0' },
           },
           ReturnValues: 'ALL_NEW',
         }),
       );
 
-      const savedMessages = parseDynamoMessages(dynamoUpdate.Attributes?.messages);
-
-      console.log(
-        `[RANDANDAN Profile Lambda] Imagem salva no S3 (${s3Url}) e registrada no DynamoDB (tabela=${tableSchema.tableName}, ${tableSchema.hashKeyName}="${user.username}")`,
-      );
+      const rankings = await scanGlobalRankings(tableSchema);
 
       return {
         statusCode: 200,
@@ -539,30 +579,49 @@ export const handler = async (event) => {
           sizeBytes: buffer.length,
           updatedAt,
           imageUrl: `data:${contentType};base64,${buffer.toString('base64')}`,
-          messages: savedMessages,
+          messages: parseDynamoMessages(dynamoUpdate.Attributes?.messages),
+          scores: parseDynamoScores(dynamoUpdate.Attributes?.scores),
+          rankings,
         }),
       };
     }
 
     // =========================================================================
     // GET /profile
-    // Busca no DynamoDB pelo nome do usuário:
-    // - O link do S3 com a imagem do usuário (s3Url) e carrega os bytes da imagem no S3
-    // - A lista de mensagens do usuário com o agente de IA (messages)
+    // - Garante que o usuário logado já esteja registrado na tabela do DynamoDB
+    //   (para aparecer imediatamente no Ranking Global mesmo em um novo PC)
+    // - Retorna imagem do S3, lista de mensagens com a IA, histórico de scores,
+    //   equipe e a lista completa do Ranking Global (todos os usuários do DynamoDB)
     // =========================================================================
     if (method === 'GET') {
-      const dynamoRes = await dynamo.send(
-        new GetItemCommand({
+      const ensureUserRes = await dynamo.send(
+        new UpdateItemCommand({
           TableName: tableSchema.tableName,
           Key: dynamoKey,
+          UpdateExpression:
+            'SET email = :e, userId = :uid, messages = if_not_exists(messages, :empty_list), scores = if_not_exists(scores, :empty_list), totalPoints = if_not_exists(totalPoints, :zero)',
+          ExpressionAttributeValues: {
+            ':e': { S: user.email },
+            ':uid': { S: user.userId },
+            ':empty_list': { L: [] },
+            ':zero': { N: '0' },
+          },
+          ReturnValues: 'ALL_NEW',
         }),
       );
 
-      const item = dynamoRes.Item;
-      const messages = parseDynamoMessages(item?.messages);
-      const s3Url = item?.s3Url?.S || item?.imageUrl?.S || item?.profileImageUrl?.S || null;
-      let targetBucket = item?.s3Bucket?.S || bucketName;
-      let targetKey = item?.s3Key?.S || null;
+      const item = ensureUserRes.Attributes || {};
+      const messages = parseDynamoMessages(item.messages);
+      const scores = parseDynamoScores(item.scores);
+      const totalPoints = Number(item.totalPoints?.N || 0);
+      const teamId = item.teamId?.N ? Number(item.teamId.N) : null;
+      const teamName = item.teamName?.S || null;
+      const s3Url = item.s3Url?.S || item.imageUrl?.S || null;
+
+      const rankings = await scanGlobalRankings(tableSchema);
+
+      let targetBucket = item.s3Bucket?.S || bucketName;
+      let targetKey = item.s3Key?.S || null;
 
       if (!targetKey && s3Url) {
         const parsedLoc = parseS3Url(s3Url, bucketName);
@@ -572,30 +631,17 @@ export const handler = async (event) => {
         }
       }
 
-      // Fallback para chave legada caso o usuário tenha enviado imagem antes de criar o item no DynamoDB
       if (!targetKey) {
-        const userSlug = sanitizeS3Slug(user.username);
-        targetKey = `profiles/${userSlug}/avatar.png`;
+        targetKey = `profiles/${sanitizeS3Slug(user.username)}/avatar.png`;
       }
 
       try {
         let s3Response;
         try {
-          s3Response = await s3.send(
-            new GetObjectCommand({
-              Bucket: targetBucket,
-              Key: targetKey,
-            }),
-          );
-        } catch (firstErr) {
-          // Tenta também a chave antiga por userId (`profiles/${user.userId}/avatar`) e migra para o DynamoDB!
+          s3Response = await s3.send(new GetObjectCommand({ Bucket: targetBucket, Key: targetKey }));
+        } catch {
           const legacyKey = `profiles/${user.userId}/avatar`;
-          s3Response = await s3.send(
-            new GetObjectCommand({
-              Bucket: bucketName,
-              Key: legacyKey,
-            }),
-          );
+          s3Response = await s3.send(new GetObjectCommand({ Bucket: bucketName, Key: legacyKey }));
           targetBucket = bucketName;
           targetKey = legacyKey;
         }
@@ -603,34 +649,13 @@ export const handler = async (event) => {
         const byteArray = await s3Response.Body.transformToByteArray();
         const buffer = Buffer.from(byteArray);
         const contentType =
-          item?.contentType?.S ||
+          item.contentType?.S ||
           s3Response.ContentType ||
           detectImageMimeFromMagicBytes(buffer) ||
           'image/jpeg';
         const base64String = buffer.toString('base64');
         const resolvedS3Url =
           s3Url || `https://${targetBucket}.s3.${REGION}.amazonaws.com/${targetKey}`;
-
-        // Se a imagem foi encontrada via chave legada mas ainda não estava salva no DynamoDB, salva agora
-        if (!s3Url) {
-          await dynamo
-            .send(
-              new UpdateItemCommand({
-                TableName: tableSchema.tableName,
-                Key: dynamoKey,
-                UpdateExpression:
-                  'SET s3Url = :url, imageUrl = :url, s3Bucket = :b, s3Key = :k, contentType = :ct, messages = if_not_exists(messages, :empty_list)',
-                ExpressionAttributeValues: {
-                  ':url': { S: resolvedS3Url },
-                  ':b': { S: targetBucket },
-                  ':k': { S: targetKey },
-                  ':ct': { S: contentType },
-                  ':empty_list': { L: [] },
-                },
-              }),
-            )
-            .catch(() => {});
-        }
 
         return {
           statusCode: 200,
@@ -645,13 +670,14 @@ export const handler = async (event) => {
             key: targetKey,
             contentType,
             sizeBytes: buffer.length,
-            updatedAt:
-              item?.updatedAt?.S ||
-              s3Response.Metadata?.updatedat ||
-              s3Response.LastModified?.toISOString() ||
-              null,
+            updatedAt: item.updatedAt?.S || s3Response.LastModified?.toISOString() || null,
             imageUrl: `data:${contentType};base64,${base64String}`,
             messages,
+            scores,
+            totalPoints,
+            teamId,
+            teamName,
+            rankings,
           }),
         };
       } catch (s3Err) {
@@ -667,7 +693,11 @@ export const handler = async (event) => {
               s3Url: null,
               imageUrl: null,
               messages,
-              message: 'Nenhuma imagem de perfil enviada ainda para este usuário.',
+              scores,
+              totalPoints,
+              teamId,
+              teamName,
+              rankings,
             }),
           };
         }
@@ -678,24 +708,15 @@ export const handler = async (event) => {
     return {
       statusCode: 405,
       headers: CORS_HEADERS,
-      body: JSON.stringify({ error: `Método ${method} não permitido na rota /profile.` }),
+      body: JSON.stringify({ error: `Método ${method} não permitido.` }),
     };
   } catch (error) {
     console.error('[RANDANDAN Profile Lambda] Erro:', error);
-    const statusCode =
-      String(error?.message || '').includes('Arquivo inválido') ||
-      String(error?.message || '').includes('Nenhum arquivo')
-        ? 400
-        : 500;
-
     return {
-      statusCode,
+      statusCode: 400,
       headers: CORS_HEADERS,
       body: JSON.stringify({
-        error:
-          error instanceof Error
-            ? error.message
-            : 'Erro interno ao processar perfil no S3/DynamoDB.',
+        error: error instanceof Error ? error.message : 'Erro interno no S3/DynamoDB.',
       }),
     };
   }
