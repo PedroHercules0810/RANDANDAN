@@ -3,6 +3,7 @@ import { environment } from '../../../environments/environment';
 import { GameMode } from '../models/score.model';
 import { AuthService } from './auth.service';
 import { GameService } from './game.service';
+import { ProfileImageService, StoredChatMessage } from './profile-image.service';
 
 export type WebSocketConnectionStatus = 'disconnected' | 'connecting' | 'connected' | 'error';
 
@@ -16,24 +17,28 @@ export interface ChatMessage {
 
 const DEFAULT_WS_ENDPOINT = 'wss://api.pedrohercules.dengoso.web.ufersa.dev.br';
 
+const WELCOME_MESSAGE: ChatMessage = {
+  id: 'welcome-msg',
+  role: 'system',
+  text: 'Olá, piloto! Sou o Chefe de Box RANDANDAN (powered by Google Gemini). Não sei qual é a moto secreta do dia, mas posso analisar seus palpites e dar dicas técnicas do catálogo! Atenção: enviar uma pergunta neste chat zera a sua pontuação na rodada atual.',
+  timestamp: '00:00:00',
+};
+
 @Injectable({ providedIn: 'root' })
 export class GeminiChatService {
   private readonly authService = inject(AuthService);
   private readonly gameService = inject(GameService);
+  private readonly profileImageService = inject(ProfileImageService);
 
   private socket: WebSocket | null = null;
+  private lastUserMessageSent: StoredChatMessage | null = null;
 
   private readonly statusSignal = signal<WebSocketConnectionStatus>('disconnected');
   private readonly endpointSignal = signal<string>(
     (environment as { websocketUrl?: string }).websocketUrl || DEFAULT_WS_ENDPOINT,
   );
   private readonly messagesSignal = signal<ChatMessage[]>([
-    {
-      id: 'welcome-msg',
-      role: 'system',
-      text: 'Olá, piloto! Sou o Chefe de Box RANDANDAN (powered by Google Gemini). Não sei qual é a moto secreta do dia, mas posso analisar seus palpites e dar dicas técnicas do catálogo! Atenção: enviar uma pergunta neste chat zera a sua pontuação na rodada atual.',
-      timestamp: this.formatTime(new Date()),
-    },
+    { ...WELCOME_MESSAGE, timestamp: this.formatTime(new Date()) },
   ]);
   private readonly sendingSignal = signal<boolean>(false);
   private readonly errorSignal = signal<string | null>(null);
@@ -47,22 +52,37 @@ export class GeminiChatService {
   readonly tokenPreview = computed(() => this.tokenPreviewSignal());
 
   constructor() {
-    // Assim que o usuário estiver autenticado no Amazon Cognito, gera os tokens
-    // de acesso e estabelece a conexão WebSocket autenticada com o API Gateway.
+    // Conecta ao WebSocket assim que autenticado no Cognito
     effect(() => {
       const auth = this.authService.authState();
       if (auth.status === 'authenticated') {
         void this.connect();
       } else {
         this.disconnect();
+        this.messagesSignal.set([
+          { ...WELCOME_MESSAGE, timestamp: this.formatTime(new Date()) },
+        ]);
+      }
+    });
+
+    // Sincroniza o histórico de mensagens carregado do DynamoDB para o chat
+    effect(() => {
+      const dynamoMessages = this.profileImageService.chatMessages();
+      if (dynamoMessages.length > 0) {
+        const mapped: ChatMessage[] = dynamoMessages.map((m, idx) => ({
+          id: m.id || `dynamo-${idx}`,
+          role: m.role === 'user' || m.role === 'model' ? m.role : 'model',
+          text: m.text,
+          timestamp: this.formatStoredTimestamp(m.timestamp),
+        }));
+        this.messagesSignal.set([
+          { ...WELCOME_MESSAGE, timestamp: this.formatTime(new Date()) },
+          ...mapped,
+        ]);
       }
     });
   }
 
-  /**
-   * Atualiza o endpoint WebSocket (útil caso o usuário queira alternar ou testar outro DNS)
-   * e reconecta automaticamente.
-   */
   async setEndpointAndReconnect(newEndpoint: string): Promise<void> {
     const cleaned = newEndpoint.trim();
     if (!cleaned) {
@@ -72,19 +92,11 @@ export class GeminiChatService {
     await this.reconnect();
   }
 
-  /**
-   * Força uma nova conexão WebSocket autenticada (ideal para capturar o handshake
-   * 101 Switching Protocols na aba Network -> WS do DevTools).
-   */
   async reconnect(): Promise<void> {
     this.disconnect();
     await this.connect();
   }
 
-  /**
-   * Estabelece a conexão WebSocket autenticada com o Amazon API Gateway
-   * anexando o Access Token do Amazon Cognito.
-   */
   async connect(): Promise<boolean> {
     if (typeof WebSocket === 'undefined') {
       return false;
@@ -165,7 +177,6 @@ export class GeminiChatService {
     });
   }
 
-  /** Encerra a conexão WebSocket ativa. */
   disconnect(): void {
     if (this.socket) {
       try {
@@ -179,22 +190,18 @@ export class GeminiChatService {
     this.sendingSignal.set(false);
   }
 
-  /**
-   * Envia uma pergunta pelo WebSocket para a rota `$default` do API Gateway.
-   * Ao enviar a pergunta, zera imediatamente a pontuação da rodada atual do jogador.
-   */
   async sendQuestion(questionText: string, mode: GameMode): Promise<void> {
     const trimmed = questionText.trim();
     if (!trimmed) {
       return;
     }
 
-    if (this.authService.authState().status !== 'authenticated') {
+    const authUser = this.authService.authState().user;
+    if (this.authService.authState().status !== 'authenticated' || !authUser) {
       this.errorSignal.set('Você precisa estar autenticado no Cognito para usar o chat.');
       return;
     }
 
-    // Garante que o WebSocket está conectado antes de enviar
     if (!this.socket || this.socket.readyState !== WebSocket.OPEN) {
       const connected = await this.connect();
       if (!connected || !this.socket || this.socket.readyState !== WebSocket.OPEN) {
@@ -211,21 +218,30 @@ export class GeminiChatService {
       .slice(-6)
       .map((m) => ({ role: m.role, text: m.text }));
 
+    const now = new Date();
+    const userMsgId = `user-${now.getTime()}`;
     const userMsg: ChatMessage = {
-      id: `user-${Date.now()}`,
+      id: userMsgId,
       role: 'user',
       text: trimmed,
-      timestamp: this.formatTime(new Date()),
+      timestamp: this.formatTime(now),
+    };
+
+    this.lastUserMessageSent = {
+      id: userMsgId,
+      role: 'user',
+      sender: authUser.displayName,
+      text: trimmed,
+      timestamp: now.toISOString(),
     };
 
     this.messagesSignal.update((prev) => [...prev, userMsg]);
     this.sendingSignal.set(true);
     this.errorSignal.set(null);
 
-    // Payload enviado ao API Gateway WebSocket (encaminhado para a Lambda via rota $default).
-    // Nunca inclui round.target (a Lambda/Gemini não sabe qual é a moto secreta).
     const payload = {
       action: '$default',
+      username: authUser.displayName,
       message: trimmed,
       guesses: round.guesses.map((g) => ({
         motorcycle: {
@@ -270,6 +286,8 @@ export class GeminiChatService {
         message?: string;
         error?: string;
         candidatesRemaining?: number;
+        savedToDynamo?: boolean;
+        timestamp?: string;
       };
 
       if (parsed.error) {
@@ -277,9 +295,9 @@ export class GeminiChatService {
         return;
       }
 
-      if (parsed.message === 'Internal server error') {
+      if (parsed.message === 'Internal server error' || parsed.message === 'Endpoint request timed out') {
         this.errorSignal.set(
-          'A rota $default do API Gateway retornou "Internal server error". Atualize o código da função Lambda (index.mjs) e verifique a permissão AmazonAPIGatewayInvokeFullAccess na Role da Lambda.',
+          `A rota $default do API Gateway retornou "${parsed.message}". Verifique o código da função Lambda (index.mjs).`,
         );
         return;
       }
@@ -289,25 +307,54 @@ export class GeminiChatService {
         parsed.message ||
         'Recebi sua mensagem no box, mas não consegui formatar a dica.';
 
+      const now = new Date();
+      const botMsgId = `model-${now.getTime()}`;
       const botMsg: ChatMessage = {
-        id: `model-${Date.now()}`,
+        id: botMsgId,
         role: 'model',
         text: replyText,
-        timestamp: this.formatTime(new Date()),
+        timestamp: this.formatTime(now),
         candidatesRemaining: parsed.candidatesRemaining,
       };
 
       this.messagesSignal.update((prev) => [...prev, botMsg]);
+
+      // Sincroniza a pergunta e a resposta na lista de mensagens do DynamoDB
+      const toSync: StoredChatMessage[] = [];
+      if (this.lastUserMessageSent) {
+        toSync.push(this.lastUserMessageSent);
+        this.lastUserMessageSent = null;
+      }
+      toSync.push({
+        id: botMsgId,
+        role: 'model',
+        sender: 'Chefe de Box (Google Gemini)',
+        text: replyText,
+        timestamp: parsed.timestamp || now.toISOString(),
+      });
+
+      void this.profileImageService.appendChatMessages(toSync, Boolean(parsed.savedToDynamo));
     } catch {
-      // Caso a Lambda retorne texto puro pelo WebSocket
+      const now = new Date();
       const botMsg: ChatMessage = {
-        id: `model-${Date.now()}`,
+        id: `model-${now.getTime()}`,
         role: 'model',
         text: rawData,
-        timestamp: this.formatTime(new Date()),
+        timestamp: this.formatTime(now),
       };
       this.messagesSignal.update((prev) => [...prev, botMsg]);
     }
+  }
+
+  private formatStoredTimestamp(raw?: string): string {
+    if (!raw) {
+      return this.formatTime(new Date());
+    }
+    const parsed = new Date(raw);
+    if (Number.isNaN(parsed.getTime())) {
+      return raw;
+    }
+    return this.formatTime(parsed);
   }
 
   private formatTime(date: Date): string {

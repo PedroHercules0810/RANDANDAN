@@ -1,8 +1,20 @@
-import { Injectable, computed, inject, signal } from '@angular/core';
+import { Injectable, computed, effect, inject, signal } from '@angular/core';
 import { environment } from '../../../environments/environment';
 import { AuthService } from './auth.service';
 
+export interface StoredChatMessage {
+  id: string;
+  role: 'user' | 'model' | 'system';
+  sender?: string;
+  text: string;
+  timestamp: string;
+}
+
 export interface ProfileImageMetadata {
+  username?: string;
+  tableName?: string;
+  partitionKey?: string;
+  s3Url?: string | null;
   bucket?: string;
   key?: string;
   contentType?: string;
@@ -28,6 +40,8 @@ export class ProfileImageService {
     (environment as { profileApiUrl?: string }).profileApiUrl || DEFAULT_PROFILE_API_URL,
   );
   private readonly imageUrlSignal = signal<string | null>(null);
+  private readonly s3UrlSignal = signal<string | null>(null);
+  private readonly chatMessagesSignal = signal<StoredChatMessage[]>([]);
   private readonly metadataSignal = signal<ProfileImageMetadata | null>(null);
   private readonly isLoadingSignal = signal<boolean>(false);
   private readonly isUploadingSignal = signal<boolean>(false);
@@ -36,11 +50,35 @@ export class ProfileImageService {
 
   readonly apiEndpoint = computed(() => this.endpointSignal());
   readonly imageUrl = computed(() => this.imageUrlSignal());
+  readonly s3Url = computed(() => this.s3UrlSignal());
+  readonly chatMessages = computed(() => this.chatMessagesSignal());
   readonly metadata = computed(() => this.metadataSignal());
   readonly isLoading = computed(() => this.isLoadingSignal());
   readonly isUploading = computed(() => this.isUploadingSignal());
   readonly errorMessage = computed(() => this.errorSignal());
   readonly successMessage = computed(() => this.successSignal());
+
+  private lastLoadedUsername: string | null = null;
+
+  constructor() {
+    // Carrega automaticamente a imagem do S3 e o histórico de mensagens do DynamoDB
+    // assim que o usuário faz login (em qualquer navegador ou computador).
+    effect(() => {
+      const auth = this.authService.authState();
+      if (auth.status === 'authenticated' && auth.user) {
+        if (this.lastLoadedUsername !== auth.user.displayName) {
+          this.lastLoadedUsername = auth.user.displayName;
+          void this.loadProfileImage();
+        }
+      } else {
+        this.lastLoadedUsername = null;
+        this.imageUrlSignal.set(null);
+        this.s3UrlSignal.set(null);
+        this.chatMessagesSignal.set([]);
+        this.metadataSignal.set(null);
+      }
+    });
+  }
 
   /** Atualiza a URL da rota /profile caso o usuário queira testar outro endpoint do API Gateway. */
   setApiEndpoint(url: string): void {
@@ -71,22 +109,31 @@ export class ProfileImageService {
   }
 
   /**
-   * Lê a imagem de perfil do usuário no bucket S3 fazendo uma requisição
-   * GET autenticada com o token JWT do Cognito na rota /profile do API Gateway.
+   * Busca no DynamoDB (pelo nome do usuário como chave principal):
+   * - O link do S3 com a imagem do usuário e carrega a imagem do S3
+   * - A lista de mensagens do usuário com o agente de IA
    */
   async loadProfileImage(): Promise<void> {
     this.errorSignal.set(null);
     this.isLoadingSignal.set(true);
 
     try {
+      await this.authService.ensureInitialized();
+      const user = this.authService.authState().user;
       const token = await this.authService.getJwtToken();
-      if (!token) {
-        this.errorSignal.set('Sessão Cognito não encontrada. Faça login para carregar sua foto de perfil.');
+
+      if (!token || !user) {
+        this.errorSignal.set(
+          'Sessão Cognito não encontrada. Faça login para carregar seu perfil do DynamoDB/S3.',
+        );
         return;
       }
 
-      const endpoint = this.endpointSignal();
-      const response = await fetch(endpoint, {
+      const baseEndpoint = this.endpointSignal();
+      const separator = baseEndpoint.includes('?') ? '&' : '?';
+      const urlWithUsername = `${baseEndpoint}${separator}username=${encodeURIComponent(user.displayName)}`;
+
+      const response = await fetch(urlWithUsername, {
         method: 'GET',
         headers: {
           Authorization: `Bearer ${token}`,
@@ -96,12 +143,12 @@ export class ProfileImageService {
 
       if (response.status === 404) {
         this.imageUrlSignal.set(null);
-        this.metadataSignal.set(null);
+        this.s3UrlSignal.set(null);
         return;
       }
 
       if (!response.ok) {
-        let errMsg = `Erro HTTP ${response.status} ao buscar imagem em GET /profile.`;
+        let errMsg = `Erro HTTP ${response.status} ao buscar perfil no DynamoDB/S3 (GET /profile).`;
         try {
           const errJson = await response.json();
           if (errJson?.error || errJson?.message) {
@@ -115,12 +162,12 @@ export class ProfileImageService {
 
       const contentTypeHeader = (response.headers.get('content-type') || '').toLowerCase();
 
-      // Suporta retorno em JSON ({ imageUrl: "data:image/..." }) ou binário direto (image/*)
       if (contentTypeHeader.startsWith('image/')) {
         const blob = await response.blob();
         const dataUrl = await this.blobToDataUrl(blob);
         this.imageUrlSignal.set(dataUrl);
         this.metadataSignal.set({
+          username: user.displayName,
           contentType: contentTypeHeader,
           sizeBytes: blob.size,
         });
@@ -129,30 +176,39 @@ export class ProfileImageService {
 
       const data = (await response.json()) as {
         exists?: boolean;
-        imageUrl?: string;
+        username?: string;
+        tableName?: string;
+        partitionKey?: string;
+        s3Url?: string | null;
+        imageUrl?: string | null;
         bucket?: string;
         key?: string;
         contentType?: string;
         sizeBytes?: number;
         updatedAt?: string | null;
+        messages?: StoredChatMessage[];
       };
 
-      if (data?.imageUrl) {
-        this.imageUrlSignal.set(data.imageUrl);
-        this.metadataSignal.set({
-          bucket: data.bucket,
-          key: data.key,
-          contentType: data.contentType,
-          sizeBytes: data.sizeBytes,
-          updatedAt: data.updatedAt,
-        });
-      } else {
-        this.imageUrlSignal.set(null);
-        this.metadataSignal.set(null);
+      if (Array.isArray(data?.messages)) {
+        this.chatMessagesSignal.set(data.messages);
       }
+
+      this.s3UrlSignal.set(data?.s3Url ?? null);
+      this.imageUrlSignal.set(data?.imageUrl || data?.s3Url || null);
+      this.metadataSignal.set({
+        username: data?.username || user.displayName,
+        tableName: data?.tableName,
+        partitionKey: data?.partitionKey,
+        s3Url: data?.s3Url ?? null,
+        bucket: data?.bucket,
+        key: data?.key,
+        contentType: data?.contentType,
+        sizeBytes: data?.sizeBytes,
+        updatedAt: data?.updatedAt,
+      });
     } catch (error) {
       this.errorSignal.set(
-        (error as Error)?.message || 'Não foi possível carregar a imagem de perfil via GET /profile.',
+        (error as Error)?.message || 'Não foi possível carregar o perfil via GET /profile.',
       );
     } finally {
       this.isLoadingSignal.set(false);
@@ -160,8 +216,9 @@ export class ProfileImageService {
   }
 
   /**
-   * Envia exclusivamente um arquivo de imagem para a rota POST /profile do API Gateway
-   * utilizando `fetch` com método `POST` e o cabeçalho `Authorization: Bearer <JWT>`.
+   * Envia exclusivamente um arquivo de imagem para POST /profile:
+   * - Salva a imagem no S3 (bucket profile)
+   * - Registra no DynamoDB (chave principal = nome do usuário) o link do S3 da imagem
    */
   async uploadProfileImage(file: File): Promise<boolean> {
     this.errorSignal.set(null);
@@ -176,8 +233,10 @@ export class ProfileImageService {
     this.isUploadingSignal.set(true);
 
     try {
+      await this.authService.ensureInitialized();
+      const user = this.authService.authState().user;
       const token = await this.authService.getJwtToken();
-      if (!token) {
+      if (!token || !user) {
         throw new Error('Token JWT do Amazon Cognito indisponível. Faça login novamente.');
       }
 
@@ -191,6 +250,7 @@ export class ProfileImageService {
           Authorization: `Bearer ${token}`,
         },
         body: JSON.stringify({
+          username: user.displayName,
           imageBase64: base64DataUrl,
           contentType: file.type,
           fileName: file.name,
@@ -205,8 +265,17 @@ export class ProfileImageService {
         );
       }
 
+      if (Array.isArray(data?.messages)) {
+        this.chatMessagesSignal.set(data.messages);
+      }
+
+      this.s3UrlSignal.set(data?.s3Url ?? null);
       this.imageUrlSignal.set(data?.imageUrl || base64DataUrl);
       this.metadataSignal.set({
+        username: data?.username || user.displayName,
+        tableName: data?.tableName,
+        partitionKey: data?.partitionKey,
+        s3Url: data?.s3Url ?? null,
         bucket: data?.bucket || 'profile',
         key: data?.key,
         contentType: data?.contentType || file.type,
@@ -214,7 +283,7 @@ export class ProfileImageService {
         updatedAt: data?.updatedAt || new Date().toISOString(),
       });
       this.successSignal.set(
-        data?.message || 'Imagem de perfil enviada com sucesso via POST /profile!',
+        data?.message || 'Imagem salva no S3 e link registrado no DynamoDB com sucesso!',
       );
       return true;
     } catch (error) {
@@ -224,6 +293,56 @@ export class ProfileImageService {
       return false;
     } finally {
       this.isUploadingSignal.set(false);
+    }
+  }
+
+  /**
+   * Adiciona novas mensagens trocadas com o agente de IA na lista local e
+   * garante que estejam salvas na lista de mensagens do usuário no DynamoDB.
+   */
+  async appendChatMessages(
+    newMessages: StoredChatMessage[],
+    alreadySavedOnServer = false,
+  ): Promise<void> {
+    if (!newMessages.length) {
+      return;
+    }
+
+    this.chatMessagesSignal.update((prev) => [...prev, ...newMessages]);
+
+    if (alreadySavedOnServer) {
+      return;
+    }
+
+    try {
+      const user = this.authService.authState().user;
+      const token = await this.authService.getJwtToken();
+      if (!token || !user) {
+        return;
+      }
+
+      const endpoint = this.endpointSignal();
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          action: 'append_messages',
+          username: user.displayName,
+          messages: newMessages,
+        }),
+      });
+
+      if (response.ok) {
+        const data = await response.json().catch(() => null);
+        if (Array.isArray(data?.messages)) {
+          this.chatMessagesSignal.set(data.messages);
+        }
+      }
+    } catch {
+      // Falha silenciosa de sincronização em background
     }
   }
 

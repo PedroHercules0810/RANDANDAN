@@ -3,15 +3,15 @@
         <h1>Meu Perfil de Piloto</h1>
 
         @if (authState().user; as user) {
-            <!-- Painel de Foto de Perfil (AWS S3 Bucket "profile" + API Gateway /profile + Cognito JWT) -->
+            <!-- Painel de Foto de Perfil (AWS DynamoDB + S3 Bucket "profile" + API Gateway /profile + Cognito JWT) -->
             <div class="profile-avatar-card">
                 <div class="avatar-preview-box">
                     @if (localPreviewUrl(); as preview) {
                         <img [src]="preview" alt="Pré-visualização da nova foto de perfil" class="avatar-image preview" />
                         <span class="avatar-badge preview-badge">PRÉVIA LOCAL</span>
                     } @else if (profileImageService.imageUrl(); as s3Image) {
-                        <img [src]="s3Image" alt="Foto de perfil do piloto carregada do S3" class="avatar-image" />
-                        <span class="avatar-badge s3-badge">S3 • BUCKET PROFILE</span>
+                        <img [src]="s3Image" alt="Foto de perfil do piloto carregada do S3 via DynamoDB" class="avatar-image" />
+                        <span class="avatar-badge s3-badge">DYNAMODB + S3</span>
                     } @else {
                         <div class="avatar-placeholder">
                             <span>{{ user.displayName.slice(0, 2).toUpperCase() }}</span>
@@ -20,10 +20,10 @@
                 </div>
 
                 <div class="avatar-controls">
-                    <span class="avatar-tag">AWS S3 BUCKET: PROFILE • ROTA PROTEGIDA POR JWT</span>
+                    <span class="avatar-tag">AWS DYNAMODB (PK: NOME DO USUÁRIO) + S3 BUCKET: PROFILE</span>
                     <h2>Foto de Perfil</h2>
                     <p class="avatar-desc">
-                        Envie exclusivamente um arquivo de imagem (<code>.PNG</code>, <code>.JPG</code>, <code>.WEBP</code> ou <code>.GIF</code>) via <code>POST /profile</code> com <code>fetch</code>, ou carregue sua imagem atual com <code>GET /profile</code>.
+                        Sua foto fica salva no S3 e o link é vinculado ao seu nome (<strong>{{ user.displayName }}</strong>) no <strong>Amazon DynamoDB</strong>, carregando automaticamente em qualquer navegador ou computador via <code>GET /profile</code>.
                     </p>
 
                     <div class="endpoint-config-row">
@@ -34,7 +34,7 @@
                             class="endpoint-input"
                             [ngModel]="customEndpoint()"
                             (ngModelChange)="customEndpoint.set($event)"
-                            placeholder="https://api.pedrohercules.dengoso.web.ufersa.dev.br/profile"
+                            placeholder="https://gaff3pwpe0.execute-api.us-east-1.amazonaws.com/profile"
                         />
                     </div>
 
@@ -61,7 +61,7 @@
                             (click)="uploadSelectedImage()"
                         >
                             @if (profileImageService.isUploading()) {
-                                Enviando (POST /profile)...
+                                Salvando no S3 e DynamoDB (POST /profile)...
                             } @else {
                                 ⬆️ Enviar Imagem (POST /profile)
                             }
@@ -74,9 +74,9 @@
                             (click)="reloadImageFromS3()"
                         >
                             @if (profileImageService.isLoading()) {
-                                Lendo S3 (GET /profile)...
+                                Consultando DynamoDB + S3 (GET /profile)...
                             } @else {
-                                🔄 Ler Imagem do S3 (GET /profile)
+                                🔄 Sincronizar do DynamoDB / S3 (GET /profile)
                             }
                         </button>
                     </div>
@@ -91,14 +91,15 @@
 
                     @if (profileImageService.metadata(); as meta) {
                         <div class="s3-meta-box">
+                            <span><strong>Chave DynamoDB ({{ meta.partitionKey || 'username' }}):</strong> {{ meta.username || user.displayName }}</span>
+                            @if (meta.tableName) {
+                                <span><strong>Tabela DynamoDB:</strong> {{ meta.tableName }}</span>
+                            }
+                            @if (meta.s3Url) {
+                                <span><strong>Link S3:</strong> <code>{{ meta.s3Url }}</code></span>
+                            }
                             @if (meta.bucket) {
-                                <span><strong>Bucket:</strong> {{ meta.bucket }}</span>
-                            }
-                            @if (meta.key) {
-                                <span><strong>Key:</strong> {{ meta.key }}</span>
-                            }
-                            @if (meta.contentType) {
-                                <span><strong>Tipo:</strong> {{ meta.contentType }}</span>
+                                <span><strong>Bucket S3:</strong> {{ meta.bucket }}</span>
                             }
                         </div>
                     }
@@ -106,7 +107,7 @@
             </div>
 
             <div class="profile-info-card">
-                <p><strong>Nome:</strong> {{ user.displayName }}</p>
+                <p><strong>Nome (Chave Principal DynamoDB):</strong> {{ user.displayName }}</p>
                 <p><strong>E-mail:</strong> {{ user.email }}</p>
                 @if (user.provider === 'google') {
                     <p><strong>Autenticação:</strong> Google (Cognito OAuth)</p>
@@ -126,6 +127,34 @@
                     }
                 </p>
             </div>
+
+            <!-- Lista de mensagens do usuário com o agente de IA armazenada no DynamoDB -->
+            <h2>Histórico de Mensagens com o Agente de IA (DynamoDB)</h2>
+            @if (profileImageService.chatMessages().length) {
+                <div class="gemini-chat-messages" style="margin-bottom: 24px;">
+                    @for (msg of profileImageService.chatMessages(); track msg.id) {
+                        <div
+                            class="gemini-msg"
+                            [class.user]="msg.role === 'user'"
+                            [class.model]="msg.role === 'model'"
+                        >
+                            <div class="gemini-msg-meta">
+                                <strong>
+                                    @if (msg.role === 'user') {
+                                        {{ msg.sender || user.displayName }} (Piloto)
+                                    } @else {
+                                        🤖 {{ msg.sender || 'Chefe de Box (Google Gemini)' }}
+                                    }
+                                </strong>
+                                <span class="mono">{{ msg.timestamp | date: 'short' }}</span>
+                            </div>
+                            <p class="gemini-msg-text">{{ msg.text }}</p>
+                        </div>
+                    }
+                </div>
+            } @else {
+                <p style="margin-bottom: 24px;">Nenhuma mensagem trocada com o Agente de IA registrada no DynamoDB ainda.</p>
+            }
 
             <h2>Histórico de pontuação</h2>
             @if (scoreHistory.length) {

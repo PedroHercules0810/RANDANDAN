@@ -2,6 +2,123 @@ import {
   ApiGatewayManagementApiClient,
   PostToConnectionCommand,
 } from '@aws-sdk/client-apigatewaymanagementapi';
+import {
+  DescribeTableCommand,
+  DynamoDBClient,
+  ListTablesCommand,
+  UpdateItemCommand,
+} from '@aws-sdk/client-dynamodb';
+
+const REGION = process.env.AWS_REGION || 'us-east-1';
+const dynamo = new DynamoDBClient({ region: REGION });
+
+let cachedTableSchema = null;
+
+async function resolveDynamoTableSchema() {
+  if (cachedTableSchema) return cachedTableSchema;
+
+  let tableName =
+    process.env.DYNAMODB_TABLE_NAME ||
+    process.env.DYNAMODB_TABLE ||
+    process.env.TABLE_NAME ||
+    '';
+
+  if (!tableName) {
+    try {
+      const { TableNames } = await dynamo.send(new ListTablesCommand({}));
+      if (Array.isArray(TableNames) && TableNames.length > 0) {
+        const preferred = TableNames.find((name) =>
+          /profile|user|randandan|pilot|chat/i.test(name),
+        );
+        tableName = preferred || TableNames[0];
+      }
+    } catch (err) {
+      console.warn('[RANDANDAN Lambda] Aviso ao listar tabelas DynamoDB:', err?.message || err);
+    }
+  }
+
+  if (!tableName) {
+    tableName = 'profile';
+  }
+
+  let hashKeyName = process.env.DYNAMODB_PK_NAME || 'username';
+  let rangeKeyName = null;
+  let rangeKeyType = 'S';
+
+  try {
+    const { Table } = await dynamo.send(new DescribeTableCommand({ TableName: tableName }));
+    const keySchema = Table?.KeySchema || [];
+    const attrDefs = Table?.AttributeDefinitions || [];
+
+    const hashEntry = keySchema.find((k) => k.KeyType === 'HASH');
+    if (hashEntry?.AttributeName) hashKeyName = hashEntry.AttributeName;
+
+    const rangeEntry = keySchema.find((k) => k.KeyType === 'RANGE');
+    if (rangeEntry?.AttributeName) {
+      rangeKeyName = rangeEntry.AttributeName;
+      const def = attrDefs.find((a) => a.AttributeName === rangeKeyName);
+      if (def?.AttributeType) rangeKeyType = def.AttributeType;
+    }
+  } catch (err) {
+    console.warn(`[RANDANDAN Lambda] Aviso DescribeTable (${tableName}):`, err?.message || err);
+  }
+
+  cachedTableSchema = { tableName, hashKeyName, rangeKeyName, rangeKeyType };
+  return cachedTableSchema;
+}
+
+async function appendChatTurnToDynamoDB(username, userText, modelReplyText, timestampIso) {
+  if (!username) return;
+  try {
+    const schema = await resolveDynamoTableSchema();
+    const key = { [schema.hashKeyName]: { S: String(username) } };
+    if (schema.rangeKeyName) {
+      key[schema.rangeKeyName] = schema.rangeKeyType === 'N' ? { N: '0' } : { S: 'profile' };
+    }
+
+    const newMessages = [
+      {
+        M: {
+          id: { S: `user-${Date.now()}` },
+          role: { S: 'user' },
+          sender: { S: String(username) },
+          text: { S: String(userText) },
+          timestamp: { S: timestampIso },
+        },
+      },
+      {
+        M: {
+          id: { S: `model-${Date.now() + 1}` },
+          role: { S: 'model' },
+          sender: { S: 'Chefe de Box (Google Gemini)' },
+          text: { S: String(modelReplyText) },
+          timestamp: { S: timestampIso },
+        },
+      },
+    ];
+
+    await dynamo.send(
+      new UpdateItemCommand({
+        TableName: schema.tableName,
+        Key: key,
+        UpdateExpression:
+          'SET messages = list_append(if_not_exists(messages, :empty_list), :new_msgs), updatedAt = :u',
+        ExpressionAttributeValues: {
+          ':empty_list': { L: [] },
+          ':new_msgs': { L: newMessages },
+          ':u': { S: timestampIso },
+        },
+      }),
+    );
+    console.log(
+      `[RANDANDAN Lambda] Mensagens salvas no DynamoDB (tabela=${schema.tableName}, ${schema.hashKeyName}="${username}")`,
+    );
+    return true;
+  } catch (err) {
+    console.warn('[RANDANDAN Lambda] Falha ao salvar mensagens no DynamoDB:', err?.message || err);
+    return false;
+  }
+}
 
 const MOTORCYCLES_CATALOG = [
   { manufacturer: 'Honda', model: 'CBR 1000RR-R Fireblade', displacementCc: 1000, weightKg: 201, style: 'Sport', fipePrice: 'R$ 189.900', topSpeedKmh: 299 },
@@ -52,7 +169,6 @@ const CORS_HEADERS = {
   'Access-Control-Allow-Headers': 'Content-Type, Authorization',
 };
 
-// Modelos rápidos com timeout curto (4.5s cada) para nunca estourar os 29s do API Gateway
 const GEMINI_MODELS = [
   'gemini-2.0-flash',
   'gemini-2.5-flash-lite',
@@ -134,7 +250,6 @@ async function callGeminiWithFallback(apiKey, contents) {
         temperature: 0.5,
         maxOutputTokens: 500,
       };
-      // Desativa o modo "thinking" nos modelos 2.5 para responder em ~1.5s em vez de >15s
       if (model.startsWith('gemini-2.5')) {
         generationConfig.thinkingConfig = { thinkingBudget: 0 };
       }
@@ -228,6 +343,7 @@ export const handler = async (event) => {
   }
 
   const userMessage = String(rawBody.message || rawBody.prompt || 'Me dê uma dica sobre a moto secreta!').trim();
+  const username = String(rawBody.username || event?.queryStringParameters?.username || '').trim();
   const guesses = Array.isArray(rawBody.guesses) ? rawBody.guesses : [];
   const hints = rawBody.hints || {};
   const history = Array.isArray(rawBody.history) ? rawBody.history : [];
@@ -263,15 +379,29 @@ export const handler = async (event) => {
     reply = buildFallbackMechanicReply(userMessage, candidates, guesses);
   }
 
+  const timestampIso = new Date().toISOString();
+  let savedToDynamo = false;
+
+  // Salva a mensagem do usuário e a resposta do agente de IA na lista do DynamoDB (chave principal = nome do usuário)
+  if (username) {
+    savedToDynamo = await withTimeout(
+      appendChatTurnToDynamoDB(username, userMessage, reply, timestampIso),
+      2500,
+      'DynamoDBAppendChat',
+    ).catch(() => false);
+  }
+
   const responsePayload = {
     type: 'chat_reply',
+    username: username || undefined,
     question: userMessage,
     reply,
     source,
+    savedToDynamo,
     candidatesRemaining: candidates.length,
     zeroScore: true,
     scoreMultiplier: 0,
-    timestamp: new Date().toISOString(),
+    timestamp: timestampIso,
   };
 
   console.log('[RANDANDAN Lambda] Resposta processada:', JSON.stringify(responsePayload));
